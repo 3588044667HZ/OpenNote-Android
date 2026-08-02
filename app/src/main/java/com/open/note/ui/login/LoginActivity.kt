@@ -77,10 +77,12 @@ class LoginActivity : ComponentActivity() {
         val isLoading by loginViewModel.isLoading.collectAsState()
         val serverUrl by loginViewModel.serverUrl.collectAsState()
         val isRegisterMode by loginViewModel.isRegisterMode.collectAsState()
+        val savedUsername by loginViewModel.savedUsername.collectAsState()
+        val savedPassword by loginViewModel.savedPassword.collectAsState()
 
         val snackbarHostState = remember { SnackbarHostState() }
-        var username by remember { mutableStateOf("") }
-        var password by remember { mutableStateOf("") }
+        var username by remember { mutableStateOf(savedUsername) }
+        var password by remember { mutableStateOf(savedPassword) }
         var passwordVisible by remember { mutableStateOf(false) }
         val scrollState = rememberScrollState()
         val focusManager = LocalFocusManager.current

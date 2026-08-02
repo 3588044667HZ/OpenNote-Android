@@ -37,7 +37,7 @@ class SharePreviewActivity : AppCompatActivity() {
         parseIntent()
         layoutBuilder = SharePreviewLayoutBuilder(this)
 
-        val rootView = layoutBuilder.build(colors, watermark, noteTitle,
+        val rootView = layoutBuilder.build(colors, watermark,
             onSave = { onExportClicked(ExportType.SAVE_TO_GALLERY) },
             onShare = { onExportClicked(ExportType.SHARE) },
             onBack = { finish() }
@@ -52,6 +52,9 @@ class SharePreviewActivity : AppCompatActivity() {
     private fun parseIntent() {
         capturePaths = intent.getStringArrayListExtra(EXTRA_CAPTURE_PATHS) ?: emptyList()
         noteTitle = intent.getStringExtra(EXTRA_NOTE_TITLE) ?: ""
+        val logo = intent.getStringExtra(EXTRA_LOGO_TEXT) ?: "分享来自 Open Note"
+        val wm = intent.getStringExtra(EXTRA_WATERMARK) ?: "备忘录"
+        watermark = ShareWatermarkConfig(logoText = logo, textCn = wm)
         intent.getStringExtra(EXTRA_COLORS_JSON)?.let { json ->
             try {
                 val map = org.json.JSONObject(json)
@@ -145,6 +148,8 @@ class SharePreviewActivity : AppCompatActivity() {
         const val EXTRA_CAPTURE_PATHS = "capture_paths"
         const val EXTRA_COLORS_JSON = "colors_json"
         const val EXTRA_NOTE_TITLE = "note_title"
+        const val EXTRA_LOGO_TEXT = "logo_text"
+        const val EXTRA_WATERMARK = "watermark"
     }
 
     enum class ExportType { SAVE_TO_GALLERY, SHARE }

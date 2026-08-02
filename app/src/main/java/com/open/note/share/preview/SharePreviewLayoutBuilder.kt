@@ -4,7 +4,6 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
-import android.graphics.Typeface
 import android.graphics.drawable.BitmapDrawable
 import android.view.Gravity
 import android.view.View
@@ -22,7 +21,7 @@ class SharePreviewLayoutBuilder(private val ctx: Context) {
     private val dp: Float get() = ctx.resources.displayMetrics.density
 
     fun build(
-        colors: ShareColors, watermark: ShareWatermarkConfig, noteTitle: String,
+        colors: ShareColors, watermark: ShareWatermarkConfig,
         onSave: () -> Unit, onShare: () -> Unit, onBack: () -> Unit
     ): View {
         val root = FrameLayout(ctx).apply { setBackgroundColor(Color.parseColor(colors.backcloth)) }
@@ -42,21 +41,6 @@ class SharePreviewLayoutBuilder(private val ctx: Context) {
         skinContainer.addView(captureLayout, RelativeLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
         ).apply { setMargins(dpi(24), dpi(24), dpi(24), 0) })
-
-        if (noteTitle.isNotEmpty()) {
-            val titleView = TextView(ctx).apply {
-                text = noteTitle; textSize = 24f; setTextColor(Color.parseColor(colors.titleColor))
-                setPadding(dpi(24), dpi(16), dpi(24), dpi(14))
-                setTypeface(Typeface.DEFAULT_BOLD)
-                id = View.generateViewId()
-            }
-            skinContainer.addView(titleView, RelativeLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply {
-                setMargins(dpi(24), dpi(12), dpi(24), dpi(8))
-                addRule(RelativeLayout.ALIGN_PARENT_TOP)
-            })
-        }
 
         buildFooter(colors, watermark)
         scrollView.addView(skinContainer)

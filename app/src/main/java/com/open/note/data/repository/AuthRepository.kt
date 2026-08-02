@@ -36,6 +36,7 @@ class AuthRepository @Inject constructor(
                     )
                 }
                 Log.d(TAG, "Login successful")
+                authStore.saveCredentials(username, password)
                 Result.success(Unit)
             } else {
                 val msg = response.body()?.msg ?: "Login failed"
