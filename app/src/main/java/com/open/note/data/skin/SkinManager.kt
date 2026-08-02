@@ -37,16 +37,22 @@ class SkinManager @Inject constructor(
         }
     }
 
+    private var currentSkinId: String = SkinData.SKIN_WHITE
+
     fun applySkin(skinId: String) {
-        val effectiveId = if (skinId == SkinData.SKIN_WHITE && isSystemDarkMode()) {
-            SkinData.SKIN_BLACK
-        } else {
-            skinId
+        currentSkinId = skinId
+        val skin = getEffectiveSkin(currentSkinId) ?: return
+        _selectedSkin.value = skin
+        scope.launch { authStore.setSkinId(skinId) }
+    }
+
+    private fun getEffectiveSkin(requestedId: String): Skin? {
+        if (isSystemDarkMode()) {
+            return embedSkins[requestedId]?.darkModeOverride
+                ?.let { embedSkins[SkinData.SKIN_BLACK] }
+                ?: embedSkins[SkinData.SKIN_BLACK]
         }
-        embedSkins[effectiveId]?.let { skin ->
-            _selectedSkin.value = skin
-            scope.launch { authStore.setSkinId(skinId) }
-        }
+        return embedSkins[requestedId]
     }
 
     fun toggleEyeProtection() {
@@ -61,7 +67,12 @@ class SkinManager @Inject constructor(
     fun isEyeProtectionActive(): Boolean =
         getCurrentSkin().id == SkinData.SKIN_YELLOW
 
-    fun getCurrentSkin(): Skin = _selectedSkin.value
+    fun getCurrentSkin(): Skin = getEffectiveSkin(currentSkinId) ?: embedSkins[SkinData.SKIN_WHITE]!!
+
+    fun refreshSkin() {
+        val skin = getEffectiveSkin(currentSkinId) ?: return
+        _selectedSkin.value = skin
+    }
 
     fun getAllSkins(): List<Skin> = SkinData.colorSkinList
         .mapNotNull { embedSkins[it] }

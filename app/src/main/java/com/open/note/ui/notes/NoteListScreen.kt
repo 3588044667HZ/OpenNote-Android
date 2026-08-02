@@ -16,11 +16,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.open.note.data.local.entity.Folder
 import com.open.note.data.local.entity.Note
+import com.open.note.data.skin.SkinColors
+import com.open.note.ui.skin.SkinViewModel
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -38,7 +42,8 @@ val NOTE_COLORS = mapOf(
 fun NoteListScreen(
     onNoteClick: (String?) -> Unit,
     onNewNote: () -> Unit,
-    viewModel: NoteListViewModel = hiltViewModel()
+    viewModel: NoteListViewModel = hiltViewModel(),
+    skinViewModel: SkinViewModel = hiltViewModel()
 ) {
     val notes by viewModel.notes.collectAsState()
     val notebooks by viewModel.notebooks.collectAsState()
@@ -46,6 +51,10 @@ fun NoteListScreen(
     val searchKeyword by viewModel.searchKeyword.collectAsState()
     val selectedNotebookId by viewModel.selectedNotebookId.collectAsState()
     val selectedColor by viewModel.selectedColor.collectAsState()
+    val skin by skinViewModel.selectedSkin.collectAsState()
+    val titleColor = SkinColors.parseColor(skin.titleColor)
+    val textColor = SkinColors.parseColor(skin.textColor)
+    val timeColor = SkinColors.parseColor(skin.timeColor)
 
     Column(modifier = Modifier.fillMaxSize()) {
         SearchBar(
@@ -90,7 +99,10 @@ fun NoteListScreen(
                         note = note,
                         onClick = { onNoteClick(note.serverId) },
                         onDelete = { viewModel.deleteNote(note.serverId ?: return@NoteCard) },
-                        onTogglePin = { viewModel.togglePin(note.serverId ?: return@NoteCard) }
+                        onTogglePin = { viewModel.togglePin(note.serverId ?: return@NoteCard) },
+                        titleColor = titleColor,
+                        textColor = textColor,
+                        timeColor = timeColor
                     )
                 }
             }
@@ -178,7 +190,10 @@ fun NoteCard(
     note: Note,
     onClick: () -> Unit,
     onDelete: () -> Unit,
-    onTogglePin: () -> Unit
+    onTogglePin: () -> Unit,
+    titleColor: Color = Color(0xFF1A1A1A),
+    textColor: Color = Color(0xFF666666),
+    timeColor: Color = Color(0xFF999999)
 ) {
     var showMenu by remember { mutableStateOf(false) }
     val color = NOTE_COLORS[note.color] ?: NOTE_COLORS["blue"]!!
@@ -188,15 +203,15 @@ fun NoteCard(
     Card(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
             .combinedClickable(onClick = onClick, onLongClick = { showMenu = true }),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Row(modifier = Modifier.fillMaxWidth()) {
             Box(
                 modifier = Modifier.width(4.dp).fillMaxHeight().defaultMinSize(minHeight = 72.dp).background(color)
             )
 
-            Column(modifier = Modifier.weight(1f).padding(12.dp)) {
+            Column(modifier = Modifier.weight(1f).padding(start = 12.dp, top = 12.dp, bottom = 12.dp, end = 8.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -204,17 +219,19 @@ fun NoteCard(
                 ) {
                     Text(
                         text = note.title.ifEmpty { "Untitled" },
-                        style = MaterialTheme.typography.titleSmall,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = titleColor,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f)
                     )
                     if (note.isPinned) {
-                        Icon(Icons.Default.PushPin, contentDescription = "Pinned", modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
+                        Icon(Icons.Default.PushPin, contentDescription = "Pinned", modifier = Modifier.size(16.dp), tint = titleColor)
                     }
                     Box {
                         IconButton(onClick = { showMenu = true }, modifier = Modifier.size(24.dp)) {
-                            Icon(Icons.Default.MoreVert, contentDescription = "More", modifier = Modifier.size(16.dp))
+                            Icon(Icons.Default.MoreVert, contentDescription = "More", modifier = Modifier.size(16.dp), tint = timeColor)
                         }
                         DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
                             DropdownMenuItem(
@@ -234,8 +251,8 @@ fun NoteCard(
                 if (note.content.isNotEmpty()) {
                     Text(
                         text = note.content.take(100).replace("\n", " "),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 14.sp,
+                        color = textColor,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.padding(top = 4.dp)
@@ -244,8 +261,8 @@ fun NoteCard(
 
                 Text(
                     text = timeText,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                    fontSize = 14.sp,
+                    color = timeColor,
                     modifier = Modifier.padding(top = 4.dp)
                 )
             }

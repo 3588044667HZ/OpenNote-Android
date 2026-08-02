@@ -2,6 +2,7 @@ package com.open.note.ui.editor
 
 import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
 import android.os.Bundle
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -24,17 +25,17 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.open.note.R
 import com.open.note.data.local.entity.Folder
 import com.open.note.data.skin.SkinColors
+import com.open.note.data.skin.SkinManager
 import com.open.note.data.skin.SkinWebView
 import com.open.note.ui.skin.SkinViewModel
 import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.launch
 import org.json.JSONObject
@@ -45,6 +46,13 @@ class NoteEditorActivity : ComponentActivity() {
         const val EXTRA_NOTE_ID = "note_id"
         fun newIntent(context: Context, noteId: String? = null): Intent =
             Intent(context, NoteEditorActivity::class.java).apply { putExtra(EXTRA_NOTE_ID, noteId) }
+    }
+
+    @Inject lateinit var skinManager: SkinManager
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        skinManager.refreshSkin()
     }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -71,6 +79,7 @@ fun NoteEditorScreen(
     val selectedNotebookId by editorViewModel.selectedNotebookId.collectAsState()
     val skin by skinViewModel.selectedSkin.collectAsState()
     val skinBg = SkinColors.parseColor(skin.backCloth)
+    val skinCardBg = SkinColors.parseColor(skin.cardBackground)
 
     val editorBridge = remember { EditorBridge() }
     var webView by remember { mutableStateOf<WebView?>(null) }
@@ -79,16 +88,29 @@ fun NoteEditorScreen(
     LaunchedEffect(noteId) { editorViewModel.initialize(noteId) }
     LaunchedEffect(skin) { webView?.evaluateJavascript(SkinWebView.generateSkinCSS(skin), null) }
 
-    editorBridge.onContentChanged = { markdown, length ->
-        editorViewModel.onContentChanged(markdown, length)
+    editorBridge.onContentChanged = { titleText, markdown, length ->
+        editorViewModel.onContentChanged(titleText, markdown, length)
     }
     editorBridge.onEditorReady = {
-        if (noteId != null) {
-            val data = JSONObject().apply { put("content", content) }.toString()
-            webView?.evaluateJavascript("window.__setContent($data)", null)
-        }
+        val currentNote = editorViewModel.note.value
+        val data = JSONObject().apply {
+            put("title", currentNote?.title ?: "")
+            put("content", currentNote?.content ?: "")
+        }.toString()
+        webView?.evaluateJavascript("window.__setContent($data)", null)
         webView?.evaluateJavascript(SkinWebView.generateSkinCSS(skin), null)
         editorViewModel.onContentLoadingComplete()
+    }
+
+    LaunchedEffect(editorViewModel.note.value) {
+        val currentNote = editorViewModel.note.value
+        if (currentNote != null) {
+            val data = JSONObject().apply {
+                put("title", currentNote.title)
+                put("content", currentNote.content)
+            }.toString()
+            webView?.evaluateJavascript("window.__setContent($data)", null)
+        }
     }
 
     Scaffold(
@@ -120,7 +142,8 @@ fun NoteEditorScreen(
                             Icon(painterResource(R.drawable.ic_more_vertical), contentDescription = "More",
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        DropdownMenu(expanded = showMore, onDismissRequest = { showMore = false }) {
+                        DropdownMenu(expanded = showMore, onDismissRequest = { showMore = false },
+                            modifier = Modifier.background(skinCardBg)) {
                             DropdownMenuItem(
                                 text = { Text("Color: ${
                                     mapOf("blue" to "Blue","green" to "Green","yellow" to "Yellow",
@@ -156,11 +179,12 @@ fun NoteEditorScreen(
                             )
                         }
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = skinBg)
             )
         },
         bottomBar = {
-            Surface(tonalElevation = 2.dp) {
+            Surface(tonalElevation = 2.dp, color = skinBg) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
                     horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("$contentLength/10000", style = MaterialTheme.typography.bodySmall,
@@ -172,17 +196,6 @@ fun NoteEditorScreen(
         }
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {
-            OutlinedTextField(
-                value = title, onValueChange = { editorViewModel.onTitleChanged(it) },
-                placeholder = { Text("Title", fontSize = 24.sp, fontWeight = FontWeight.Bold) },
-                textStyle = androidx.compose.ui.text.TextStyle(fontSize = 24.sp, fontWeight = FontWeight.Bold,
-                    lineHeight = 26.sp),
-                singleLine = true, modifier = Modifier.fillMaxWidth()
-                    .padding(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 14.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
-                    unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f)))
-            Spacer(Modifier.height(4.dp))
             EditorToolbarRow(webView = webView)
             AndroidView(
                 factory = { ctx ->

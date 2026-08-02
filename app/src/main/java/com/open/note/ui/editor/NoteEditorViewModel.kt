@@ -83,7 +83,10 @@ class NoteEditorViewModel @Inject constructor(
         markDirty()
     }
 
-    fun onContentChanged(markdown: String, length: Int) {
+    fun onContentChanged(title: String, markdown: String, length: Int) {
+        if (title.isNotEmpty() && title != _title.value) {
+            _title.value = title
+        }
         _content.value = markdown
         _contentLength.value = length
         if (contentLoaded) {

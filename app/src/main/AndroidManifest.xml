@@ -25,12 +25,14 @@
 
         <activity
             android:name=".MainActivity"
-            android:exported="false" />
+            android:exported="false"
+            android:configChanges="uiMode|screenSize|orientation" />
 
         <activity
             android:name=".ui.editor.NoteEditorActivity"
             android:exported="false"
             android:windowSoftInputMode="adjustResize"
+            android:configChanges="uiMode|screenSize|orientation"
             android:theme="@style/Theme.OpenNote.Editor" />
 
         <activity

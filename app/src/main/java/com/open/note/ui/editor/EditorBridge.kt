@@ -4,7 +4,7 @@ import android.webkit.JavascriptInterface
 import org.json.JSONObject
 
 class EditorBridge {
-    var onContentChanged: ((markdown: String, length: Int) -> Unit)? = null
+    var onContentChanged: ((title: String, markdown: String, length: Int) -> Unit)? = null
     var onSelectionChanged: ((isBold: Boolean, isItalic: Boolean) -> Unit)? = null
     var onEditorReady: (() -> Unit)? = null
 
@@ -14,9 +14,10 @@ class EditorBridge {
             val msg = JSONObject(json)
             when (msg.getString("type")) {
                 "contentChange" -> {
+                    val title = msg.optString("title", "")
                     val markdown = msg.getString("markdown")
                     val length = msg.optInt("length", markdown.length)
-                    onContentChanged?.invoke(markdown, length)
+                    onContentChanged?.invoke(title, markdown, length)
                 }
                 "selectionChange" -> {
                     val isBold = msg.optBoolean("isBold", false)

@@ -1,6 +1,7 @@
 package com.open.note
 
 import android.content.Intent
+import android.content.res.Configuration
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -14,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.open.note.data.skin.SkinColors
+import com.open.note.data.skin.SkinManager
 import com.open.note.ui.editor.NoteEditorActivity
 import com.open.note.ui.login.LoginActivity
 import com.open.note.ui.notes.NoteListScreen
@@ -21,9 +23,18 @@ import com.open.note.ui.settings.SettingsScreen
 import com.open.note.ui.skin.SkinViewModel
 import com.open.note.ui.trash.TrashScreen
 import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+
+    @Inject lateinit var skinManager: SkinManager
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        skinManager.refreshSkin()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
@@ -65,26 +76,20 @@ fun MainScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Text(
-                        text = when (selectedTab) {
-                            BottomTab.Notes -> "Notes"
-                            BottomTab.Trash -> "Trash"
-                            BottomTab.Settings -> "Settings"
-                        }
-                    )
-                }
+                    Text(when (selectedTab) {
+                        BottomTab.Notes -> "Notes"
+                        BottomTab.Trash -> "Trash"
+                        BottomTab.Settings -> "Settings"
+                    })
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = skinBg)
             )
         },
         bottomBar = {
-            NavigationBar {
+            NavigationBar(containerColor = skinBg) {
                 tabs.forEach { tab ->
                     NavigationBarItem(
-                        icon = {
-                            Icon(
-                                imageVector = if (selectedTab == tab) tab.selectedIcon else tab.unselectedIcon,
-                                contentDescription = tab.title
-                            )
-                        },
+                        icon = { Icon(if (selectedTab == tab) tab.selectedIcon else tab.unselectedIcon, contentDescription = tab.title) },
                         label = { Text(tab.title) },
                         selected = selectedTab == tab,
                         onClick = { selectedTab = tab }

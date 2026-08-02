@@ -3,16 +3,11 @@
 
   var nativeBridge = window.__nativeBridge || {
     postMessage: function(json) {
-      try {
-        var msg = JSON.parse(json);
-        if (window.__nativeBridgeReal) {
-          window.__nativeBridgeReal.postMessage(json);
-        }
-      } catch(e) {}
+      try { var msg = JSON.parse(json); } catch(e) {}
     }
   };
-
-  var editorInitialized = false;
+  var titleFocused = false;
+  var contentFocused = false;
 
   function htmlToMarkdown(html) {
     var md = html || '';
@@ -56,9 +51,7 @@
     html = html.replace(/>/g, '&gt;');
     var lines = html.split('\n');
     var result = [];
-    var inList = false;
-    var inOList = false;
-
+    var inList = false, inOList = false;
     for (var i = 0; i < lines.length; i++) {
       var line = lines[i];
       if (/^### (.+)/.test(line)) {
@@ -80,8 +73,6 @@
         if (inOList) { result.push('</ol>'); inOList = false; }
         result.push('<blockquote>' + processInline(line.replace(/^> /, '')) + '</blockquote>');
       } else if (line.trim() === '---') {
-        if (inList) { result.push('</ul>'); inList = false; }
-        if (inOList) { result.push('</ol>'); inOList = false; }
         result.push('<hr>');
       } else if (line.trim() === '') {
         if (inList) { result.push('</ul>'); inList = false; }
@@ -108,62 +99,88 @@
     return text;
   }
 
-  function initEditor() {
-    var editorEl = document.getElementById('editor');
-    if (!editorEl) return;
+  function notifyContentChange() {
+    var titleEl = document.getElementById('titleEditor');
+    var contentEl = document.getElementById('contentEditor');
+    var titleText = titleEl ? titleEl.innerText.trim() : '';
+    var contentHtml = contentEl ? contentEl.innerHTML : '';
+    var contentMd = htmlToMarkdown(contentHtml);
+    nativeBridge.postMessage(JSON.stringify({
+      type: 'contentChange',
+      title: titleText,
+      markdown: contentMd,
+      length: contentMd.length
+    }));
+  }
 
-    editorEl.contentEditable = 'true';
-    editorEl.classList.add('ProseMirror');
+  document.execCommand('defaultParagraphSeparator', false, 'p');
 
-    document.execCommand('defaultParagraphSeparator', false, 'p');
+  function init() {
+    var titleEl = document.getElementById('titleEditor');
+    var contentEl = document.getElementById('contentEditor');
+    if (!titleEl || !contentEl) return;
 
-    editorEl.addEventListener('input', function() {
-      var html = editorEl.innerHTML;
-      var md = htmlToMarkdown(html);
-      nativeBridge.postMessage(JSON.stringify({
-        type: 'contentChange',
-        markdown: md,
-        length: md.length
-      }));
+    titleEl.addEventListener('focus', function() { titleFocused = true; });
+    titleEl.addEventListener('blur', function() { titleFocused = false; });
+    contentEl.addEventListener('focus', function() { contentFocused = true; });
+    contentEl.addEventListener('blur', function() { contentFocused = false; });
+
+    titleEl.addEventListener('input', notifyContentChange);
+
+    titleEl.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        contentEl.focus();
+      }
     });
 
-    editorInitialized = true;
-    nativeBridge.postMessage(JSON.stringify({ type: 'editorReady' }));
+    contentEl.addEventListener('input', notifyContentChange);
   }
+
+  var activeEditor = function() {
+    return titleFocused ? document.getElementById('titleEditor') : document.getElementById('contentEditor');
+  };
 
   window.editor = {
     chain: function() { return this; },
-    focus: function() { return this; },
-    toggleBold: function() { document.execCommand('bold', false, null); return this; },
-    toggleItalic: function() { document.execCommand('italic', false, null); return this; },
-    toggleUnderline: function() { document.execCommand('underline', false, null); return this; },
-    toggleStrike: function() { document.execCommand('strikeThrough', false, null); return this; },
-    toggleBulletList: function() { document.execCommand('insertUnorderedList', false, null); return this; },
-    toggleOrderedList: function() { document.execCommand('insertOrderedList', false, null); return this; },
-    toggleBlockquote: function() { document.execCommand('formatBlock', false, 'blockquote'); return this; },
-    toggleHeading: function(opts) { document.execCommand('formatBlock', false, 'h' + (opts ? opts.level : 1)); return this; },
+    focus: function() { var el = activeEditor(); if (el) el.focus(); return this; },
+    toggleBold: function() { var el = activeEditor(); if (el) { el.focus(); document.execCommand('bold', false, null); } return this; },
+    toggleItalic: function() { var el = activeEditor(); if (el) { el.focus(); document.execCommand('italic', false, null); } return this; },
+    toggleUnderline: function() { var el = activeEditor(); if (el) { el.focus(); document.execCommand('underline', false, null); } return this; },
+    toggleStrike: function() { var el = activeEditor(); if (el) { el.focus(); document.execCommand('strikeThrough', false, null); } return this; },
+    toggleBulletList: function() { var el = activeEditor(); if (el) { el.focus(); document.execCommand('insertUnorderedList', false, null); } return this; },
+    toggleOrderedList: function() { var el = activeEditor(); if (el) { el.focus(); document.execCommand('insertOrderedList', false, null); } return this; },
+    toggleBlockquote: function() { var el = activeEditor(); if (el) { el.focus(); document.execCommand('formatBlock', false, 'blockquote'); } return this; },
+    toggleHeading: function(opts) { var el = activeEditor(); if (el) { el.focus(); document.execCommand('formatBlock', false, 'h' + (opts ? opts.level : 1)); } return this; },
     run: function() {}
   };
 
   window.__setContent = function(data) {
-    var el = document.getElementById('editor');
-    if (el && data && data.content) {
-      el.innerHTML = markdownToHtml(data.content);
+    if (data && data.title !== undefined) {
+      var titleEl = document.getElementById('titleEditor');
+      if (titleEl) titleEl.innerText = data.title || '';
     }
+    if (data && data.content) {
+      var contentEl = document.getElementById('contentEditor');
+      if (contentEl) contentEl.innerHTML = markdownToHtml(data.content);
+    }
+    document.getElementById('contentEditor')?.focus();
   };
 
   window.__setReadonly = function(flag) {
-    var el = document.getElementById('editor');
-    if (el) el.contentEditable = flag ? 'false' : 'true';
+    ['titleEditor', 'contentEditor'].forEach(function(id) {
+      var el = document.getElementById(id);
+      if (el) el.contentEditable = flag ? 'false' : 'true';
+    });
   };
 
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initEditor);
+    document.addEventListener('DOMContentLoaded', function() {
+      init();
+      nativeBridge.postMessage(JSON.stringify({ type: 'editorReady' }));
+    });
   } else {
-    initEditor();
-  }
-
-  if (window.__nativeBridgeReal) {
-    window.__nativeBridge = window.__nativeBridgeReal;
+    init();
+    nativeBridge.postMessage(JSON.stringify({ type: 'editorReady' }));
   }
 })();

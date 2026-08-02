@@ -8,82 +8,100 @@
   body {
     font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
     font-size: 16px;
-    line-height: calc(1em + 8px);
-    color: rgba(0, 0, 0, 0.9);
-    background: #ffffff;
+    color: var(--text-color, rgba(0, 0, 0, 0.9));
+    background: var(--content-bg, #ffffff);
     -webkit-text-size-adjust: 100%;
   }
   @media (prefers-color-scheme: dark) {
-    body {
-      color: #FFFFFF;
-      background: #000000;
-    }
+    body { color: var(--text-color, #FFFFFF); background: var(--content-bg, #000000); }
   }
-  .ProseMirror {
+  #titleEditor {
     outline: none;
-    min-height: 100vh;
-    padding: 0 24px;
+    font-size: 24px;
+    font-weight: 650;
+    line-height: 1.1;
+    padding: 16px 24px 14px;
+    min-height: 48px;
     word-wrap: break-word;
-    white-space: pre-wrap;
+    color: var(--title-color, inherit);
+    background: var(--content-bg, transparent);
   }
-  .ProseMirror p.is-editor-empty:first-child::before {
-    color: #adb5bd;
+  #titleEditor:empty::before {
     content: attr(data-placeholder);
-    float: left;
-    height: 0;
+    color: rgba(0,0,0,0.15);
     pointer-events: none;
   }
   @media (prefers-color-scheme: dark) {
-    .ProseMirror p.is-editor-empty:first-child::before { color: #555; }
+    #titleEditor { color: var(--title-color, #FFFFFF); }
+    #titleEditor:empty::before { color: var(--time-color, rgba(255,255,255,0.15)); }
   }
-  .ProseMirror h1 { font-size: 1.5em; font-weight: 700; margin: 0.2em 0 0; line-height: 1.1; }
-  .ProseMirror h2 { font-size: 1.25em; font-weight: 650; margin: 0.15em 0 0; line-height: 1.1; }
-  .ProseMirror h3 { font-size: 1.1em; font-weight: 650; margin: 0.1em 0 0; line-height: 1.1; }
-  .ProseMirror p { margin: 0; }
-  .ProseMirror ul, .ProseMirror ol { padding-left: 1.5em; margin: 0.2em 0; }
-  .ProseMirror li { margin: 0.1em 0; }
-  .ProseMirror blockquote {
+  #contentEditor {
+    outline: none;
+    min-height: 200px;
+    padding: 0 24px;
+    font-size: 16px;
+    line-height: calc(1em + 8px);
+    word-wrap: break-word;
+    white-space: pre-wrap;
+    color: var(--text-color, inherit);
+    background: var(--content-bg, transparent);
+  }
+  #contentEditor:empty::before {
+    content: attr(data-placeholder);
+    color: rgba(0,0,0,0.15);
+    pointer-events: none;
+  }
+  @media (prefers-color-scheme: dark) {
+    #contentEditor { color: var(--text-color, #FFFFFF); }
+    #contentEditor:empty::before { color: var(--time-color, rgba(255,255,255,0.15)); }
+  }
+  #contentEditor h1 { font-size: 1.5em; font-weight: 700; margin: 0.2em 0 0; line-height: 1.1; }
+  #contentEditor h2 { font-size: 1.25em; font-weight: 650; margin: 0.15em 0 0; line-height: 1.1; }
+  #contentEditor h3 { font-size: 1.1em; font-weight: 650; margin: 0.1em 0 0; line-height: 1.1; }
+  #contentEditor p { margin: 0; }
+  #contentEditor ul, #contentEditor ol { padding-left: 1.5em; margin: 0.2em 0; }
+  #contentEditor li { margin: 0.1em 0; }
+  #contentEditor blockquote {
     border-left: 3px solid rgba(0,0,0,0.12);
     padding-left: 1em; margin: 0.2em 0; color: rgba(0,0,0,0.6);
   }
   @media (prefers-color-scheme: dark) {
-    .ProseMirror blockquote { border-left-color: rgba(255,255,255,0.2); color: rgba(255,255,255,0.6); }
+    #contentEditor blockquote { border-left-color: rgba(255,255,255,0.2); color: rgba(255,255,255,0.6); }
   }
-  .ProseMirror code {
-    background: rgba(0,0,0,0.06);
-    padding: 0.2em 0.4em; border-radius: 3px;
+  #contentEditor code {
+    background: rgba(0,0,0,0.06); padding: 0.2em 0.4em; border-radius: 3px;
     font-family: monospace; font-size: 0.9em;
   }
   @media (prefers-color-scheme: dark) {
-    .ProseMirror code { background: rgba(255,255,255,0.1); }
+    #contentEditor code { background: rgba(255,255,255,0.1); }
   }
-  .ProseMirror pre {
-    background: rgba(0,0,0,0.04);
-    padding: 0.8em; border-radius: 6px; overflow-x: auto; margin: 0.2em 0;
+  #contentEditor pre {
+    background: rgba(0,0,0,0.04); padding: 0.8em; border-radius: 6px; overflow-x: auto; margin: 0.2em 0;
   }
   @media (prefers-color-scheme: dark) {
-    .ProseMirror pre { background: rgba(255,255,255,0.06); }
+    #contentEditor pre { background: rgba(255,255,255,0.06); }
   }
-  .ProseMirror pre code { background: none; padding: 0; }
-  .ProseMirror hr { border: none; border-top: 1px solid rgba(0,0,0,0.12); margin: 1em 0; }
+  #contentEditor pre code { background: none; padding: 0; }
+  #contentEditor hr { border: none; border-top: 1px solid rgba(0,0,0,0.12); margin: 1em 0; }
   @media (prefers-color-scheme: dark) {
-    .ProseMirror hr { border-top-color: rgba(255,255,255,0.15); }
+    #contentEditor hr { border-top-color: rgba(255,255,255,0.15); }
   }
-  .ProseMirror img { max-width: 100%; height: auto; }
-  .ProseMirror a { color: #1A73E8; text-decoration: underline; }
-  .ProseMirror strong, .ProseMirror b { font-weight: 750; }
-  .ProseMirror em { font-style: italic; }
-  .ProseMirror s { text-decoration: line-through; }
-  .ProseMirror u { text-decoration: underline; }
-  .ProseMirror table { border-collapse: collapse; }
-  .ProseMirror td, .ProseMirror th { border: 1px solid rgba(0,0,0,0.12); padding: 8px 12px; }
+  #contentEditor img { max-width: 100%; height: auto; }
+  #contentEditor a { color: #1A73E8; text-decoration: underline; }
+  #contentEditor strong, #contentEditor b { font-weight: 750; }
+  #contentEditor em { font-style: italic; }
+  #contentEditor s { text-decoration: line-through; }
+  #contentEditor u { text-decoration: underline; }
+  #contentEditor table { border-collapse: collapse; }
+  #contentEditor td, #contentEditor th { border: 1px solid rgba(0,0,0,0.12); padding: 8px 12px; }
   @media (prefers-color-scheme: dark) {
-    .ProseMirror td, .ProseMirror th { border-color: rgba(255,255,255,0.15); }
+    #contentEditor td, #contentEditor th { border-color: rgba(255,255,255,0.15); }
   }
 </style>
 </head>
 <body>
-<div id="editor"></div>
+<h1 id="titleEditor" contenteditable="true" data-placeholder="Title"></h1>
+<div id="contentEditor" contenteditable="true" data-placeholder="Start writing..."></div>
 <script src="editor-core.js"></script>
 </body>
 </html>
