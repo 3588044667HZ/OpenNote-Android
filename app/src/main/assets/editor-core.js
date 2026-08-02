@@ -164,7 +164,8 @@
       var contentEl = document.getElementById('contentEditor');
       if (contentEl) contentEl.innerHTML = markdownToHtml(data.content);
     }
-    document.getElementById('contentEditor')?.focus();
+    var contentEl = document.getElementById('contentEditor');
+    if (contentEl) contentEl.focus();
   };
 
   window.__setReadonly = function(flag) {

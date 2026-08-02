@@ -1,9 +1,13 @@
 package com.open.note.ui.editor
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
 import android.os.Bundle
+import android.util.Log
+import android.webkit.ConsoleMessage
+import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.ComponentActivity
@@ -61,6 +65,7 @@ class NoteEditorActivity : ComponentActivity() {
     }
 }
 
+@SuppressLint("StateFlowValueCalledInComposition")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NoteEditorScreen(
@@ -86,30 +91,38 @@ fun NoteEditorScreen(
     var showDeleteDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(noteId) { editorViewModel.initialize(noteId) }
-    LaunchedEffect(skin) { webView?.evaluateJavascript(SkinWebView.generateSkinCSS(skin), null) }
+    LaunchedEffect(skin) {
+        webView?.post {
+            webView?.evaluateJavascript(SkinWebView.generateSkinCSS(skin)) { r -> if (r == "null") Log.w("Editor", "skinCSS null") }
+        }
+    }
 
     editorBridge.onContentChanged = { titleText, markdown, length ->
         editorViewModel.onContentChanged(titleText, markdown, length)
     }
     editorBridge.onEditorReady = {
-        val currentNote = editorViewModel.note.value
-        val data = JSONObject().apply {
-            put("title", currentNote?.title ?: "")
-            put("content", currentNote?.content ?: "")
-        }.toString()
-        webView?.evaluateJavascript("window.__setContent($data)", null)
-        webView?.evaluateJavascript(SkinWebView.generateSkinCSS(skin), null)
-        editorViewModel.onContentLoadingComplete()
+        webView?.post {
+            val currentNote = editorViewModel.note.value
+            val data = JSONObject().apply {
+                put("title", currentNote?.title ?: "")
+                put("content", currentNote?.content ?: "")
+            }.toString()
+            webView?.evaluateJavascript("window.__setContent($data)") { r -> if (r == "null") Log.w("Editor", "setContent null") }
+            webView?.evaluateJavascript(SkinWebView.generateSkinCSS(skin)) { r -> if (r == "null") Log.w("Editor", "skinCSS null") }
+            editorViewModel.onContentLoadingComplete()
+        }
     }
 
     LaunchedEffect(editorViewModel.note.value) {
         val currentNote = editorViewModel.note.value
         if (currentNote != null) {
-            val data = JSONObject().apply {
-                put("title", currentNote.title)
-                put("content", currentNote.content)
-            }.toString()
-            webView?.evaluateJavascript("window.__setContent($data)", null)
+            webView?.post {
+                val data = JSONObject().apply {
+                    put("title", currentNote.title)
+                    put("content", currentNote.content)
+                }.toString()
+                webView?.evaluateJavascript("window.__setContent($data)") { r -> if (r == "null") Log.w("Editor", "retry null") }
+            }
         }
     }
 
@@ -195,7 +208,7 @@ fun NoteEditorScreen(
             }
         }
     ) { padding ->
-        Column(Modifier.padding(padding).fillMaxSize()) {
+        Column(Modifier.padding(padding).imePadding().fillMaxSize()) {
             EditorToolbarRow(webView = webView)
             AndroidView(
                 factory = { ctx ->
@@ -203,11 +216,34 @@ fun NoteEditorScreen(
                         layoutParams = android.widget.FrameLayout.LayoutParams(
                             android.view.ViewGroup.LayoutParams.MATCH_PARENT,
                             android.view.ViewGroup.LayoutParams.MATCH_PARENT)
-                        settings.javaScriptEnabled = true; settings.domStorageEnabled = true; settings.allowFileAccess = true
+                        settings.javaScriptEnabled = true
+                        settings.domStorageEnabled = true
+                        settings.databaseEnabled = true
+                        settings.allowFileAccess = true
+                        settings.cacheMode = android.webkit.WebSettings.LOAD_DEFAULT
+                        settings.useWideViewPort = true
+                        settings.loadWithOverviewMode = true
                         addJavascriptInterface(editorBridge, "__nativeBridge")
+                        webChromeClient = object : WebChromeClient() {
+                            override fun onConsoleMessage(msg: ConsoleMessage): Boolean {
+                                Log.d("WebView", "[${msg.messageLevel()}] L${msg.lineNumber()}: ${msg.message()}")
+                                return true
+                            }
+                        }
                         webViewClient = object : WebViewClient() {
                             override fun onPageFinished(view: WebView, url: String) {
-                                editorBridge.onEditorReady?.invoke()
+                                view.evaluateJavascript("typeof window.__setContent") { result ->
+                                    if (result == "\"function\"") {
+                                        editorBridge.onEditorReady?.invoke()
+                                    } else {
+                                        Log.e("WebView", "__setContent not ready: $result, retrying...")
+                                        view.postDelayed({ editorBridge.onEditorReady?.invoke() }, 500)
+                                    }
+                                }
+                            }
+                            override fun onReceivedError(view: WebView, request: android.webkit.WebResourceRequest?,
+                                                          error: android.webkit.WebResourceError?) {
+                                Log.e("WebView", "Page load error: ${error?.description}")
                             }
                         }
                         loadUrl("file:///android_asset/editor.html")

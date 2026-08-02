@@ -1,5 +1,6 @@
 package com.open.note.ui.editor
 
+import android.util.Log
 import android.webkit.JavascriptInterface
 import org.json.JSONObject
 
@@ -28,7 +29,8 @@ class EditorBridge {
                     onEditorReady?.invoke()
                 }
             }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Log.e("EditorBridge", "Failed to parse message: ${json.take(200)}", e)
         }
     }
 }
