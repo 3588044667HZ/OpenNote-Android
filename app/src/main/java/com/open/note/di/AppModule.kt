@@ -9,6 +9,7 @@ import com.open.note.data.local.dao.NoteDao
 import com.open.note.data.remote.api.AuthApi
 import com.open.note.data.remote.api.NoteApi
 import com.open.note.data.remote.api.NotebookApi
+import com.open.note.data.remote.api.ShareSettingsApi
 import com.open.note.data.remote.interceptor.BaseUrlInterceptor
 import com.open.note.data.remote.interceptor.JwtInterceptor
 import com.google.gson.Gson
@@ -87,4 +88,8 @@ object AppModule {
     @Provides
     @Singleton
     fun provideNotebookApi(retrofit: Retrofit): NotebookApi = retrofit.create(NotebookApi::class.java)
+
+    @Provides
+    @Singleton
+    fun provideShareSettingsApi(retrofit: Retrofit): ShareSettingsApi = retrofit.create(ShareSettingsApi::class.java)
 }

@@ -32,6 +32,7 @@ import androidx.compose.material3.Divider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -41,11 +42,14 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -54,7 +58,9 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.open.note.data.local.entity.Folder
 import com.open.note.data.skin.SkinColors
 import com.open.note.data.skin.SkinData
+import com.open.note.R
 import com.open.note.ui.skin.SkinViewModel
+import kotlinx.coroutines.launch
 
 @Composable
 fun SettingsScreen(
@@ -241,6 +247,140 @@ fun SettingsScreen(
                                 )
                             }
                         }
+                    }
+                }
+            }
+        }
+
+        item {
+            Spacer(modifier = Modifier.height(8.dp))
+            Divider()
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+
+        item {
+            Text(
+                "SERVER",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(bottom = 4.dp)
+            )
+        }
+
+        item {
+            val act = androidx.compose.ui.platform.LocalContext.current
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("API Server", style = MaterialTheme.typography.bodyMedium)
+                        Text(serverUrl, style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    IconButton(onClick = {
+                        act.startActivity(android.content.Intent(act, NetworkSettingsActivity::class.java))
+                    }) {
+                        Icon(painterResource(R.drawable.ic_sync), contentDescription = "Change Server",
+                            tint = MaterialTheme.colorScheme.primary)
+                    }
+                }
+            }
+        }
+
+        item {
+            Spacer(modifier = Modifier.height(8.dp))
+            Divider()
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+
+        item {
+            Text(
+                "SHARE SETTINGS",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(bottom = 4.dp)
+            )
+        }
+
+        item {
+            val context = LocalContext.current
+            val scope = rememberCoroutineScope()
+            var logoText by remember { mutableStateOf("") }
+            var wmText by remember { mutableStateOf("") }
+            LaunchedEffect(Unit) {
+                logoText = com.open.note.share.ShareSettings.getLogoText(context)
+                wmText = com.open.note.share.ShareSettings.getWatermark(context)
+                try {
+                    val entryPoint = dagger.hilt.android.EntryPointAccessors.fromApplication(
+                        context.applicationContext,
+                        com.open.note.di.ShareSettingsEntryPoint::class.java)
+                    val api = entryPoint.shareSettingsApi()
+                    val resp = api.getShareSettings()
+                    if (resp.isSuccessful && resp.body()?.code == 0) {
+                        val server = resp.body()!!.data!!
+                        logoText = server.logoText
+                        wmText = server.watermark
+                        com.open.note.share.ShareSettings.applyServerData(context, server.logoText, server.watermark)
+                    }
+                } catch (_: Exception) {}
+            }
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    OutlinedTextField(
+                        value = logoText, onValueChange = { logoText = it },
+                        label = { Text("Page Footer (Line 1)", fontSize = 12.sp) },
+                        singleLine = true, modifier = Modifier.fillMaxWidth(),
+                        textStyle = MaterialTheme.typography.bodySmall)
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = wmText, onValueChange = { wmText = it },
+                        label = { Text("Watermark (Line 2)", fontSize = 12.sp) },
+                        singleLine = true, modifier = Modifier.fillMaxWidth(),
+                        textStyle = MaterialTheme.typography.bodySmall)
+                    Spacer(Modifier.height(8.dp))
+                    Button(onClick = {
+                        scope.launch {
+                            com.open.note.share.ShareSettings.saveLocal(context, logoText, wmText)
+                        }
+                    }, modifier = Modifier.fillMaxWidth()) {
+                        Text("Save Share Settings")
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    OutlinedButton(onClick = {
+                        scope.launch {
+                            try {
+                                val api = dagger.hilt.android.EntryPointAccessors.fromApplication(
+                                    context.applicationContext,
+                                    com.open.note.di.ShareSettingsEntryPoint::class.java
+                                ).shareSettingsApi()
+                                val resp = api.updateShareSettings(
+                                    com.open.note.data.remote.dto.ShareSettingsDto(logoText, wmText)
+                                )
+                                if (resp.isSuccessful) {
+                                    com.open.note.share.ShareSettings.applyServerData(context, logoText, wmText)
+                                    android.widget.Toast.makeText(context, "已同步到服务器", android.widget.Toast.LENGTH_SHORT).show()
+                                } else {
+                                    android.widget.Toast.makeText(context, "同步失败: ${resp.code()}", android.widget.Toast.LENGTH_SHORT).show()
+                                }
+                            } catch (e: Exception) {
+                                android.widget.Toast.makeText(context, "同步失败: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }, modifier = Modifier.fillMaxWidth()) {
+                        Icon(painterResource(R.drawable.ic_sync), contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Sync to Server")
                     }
                 }
             }

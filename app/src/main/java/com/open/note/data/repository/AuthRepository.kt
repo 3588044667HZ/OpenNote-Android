@@ -36,6 +36,7 @@ class AuthRepository @Inject constructor(
                     )
                 }
                 Log.d(TAG, "Login successful")
+                authStore.saveCredentials(username, password)
                 Result.success(Unit)
             } else {
                 val msg = response.body()?.msg ?: "Login failed"
@@ -90,12 +91,12 @@ class AuthRepository @Inject constructor(
         return try {
             Log.d(TAG, "Logging out")
             val response = authApi.logout()
-            authStore.clear()
+            authStore.clearTokens()
             Log.d(TAG, "Logout successful")
             Result.success(Unit)
         } catch (e: Exception) {
             Log.e(TAG, "Logout error", e)
-            authStore.clear()
+            authStore.clearTokens()
             Result.failure(e)
         }
     }

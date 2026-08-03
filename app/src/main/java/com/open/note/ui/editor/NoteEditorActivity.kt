@@ -330,6 +330,8 @@ fun doShareAsImage(webView: WebView, skin: com.open.note.data.skin.Skin, ctx: Co
             putStringArrayListExtra("capture_paths", arrayListOf(cacheFile.absolutePath))
             putExtra("colors_json", colorsJson)
             putExtra("note_title", noteTitle)
+            putExtra("logo_text", com.open.note.share.ShareSettings.getLogoText(ctx))
+            putExtra("watermark", com.open.note.share.ShareSettings.getWatermark(ctx))
         }
         ctx.startActivity(intent)
     }

@@ -27,8 +27,11 @@ class AuthStore @Inject constructor(
         private val LAST_SYNC_TIME = stringPreferencesKey("last_sync_time")
         private val USERNAME = stringPreferencesKey("username")
         private val USER_CREATED_AT = stringPreferencesKey("user_created_at")
+        private val PASSWORD = stringPreferencesKey("password")
         private val SERVER_URL = stringPreferencesKey("server_url")
         private val SKIN_ID = stringPreferencesKey("skin_id")
+        private val SHARE_LOGO_TEXT = stringPreferencesKey("share_logo_text")
+        private val SHARE_WATERMARK = stringPreferencesKey("share_watermark")
     }
 
     val accessToken: Flow<String?> = context.dataStore.data.map { prefs ->
@@ -73,10 +76,26 @@ class AuthStore @Inject constructor(
         }
     }
 
+    suspend fun saveCredentials(username: String, password: String) {
+        context.dataStore.edit { prefs ->
+            prefs[USERNAME] = username
+            prefs[PASSWORD] = password
+        }
+    }
+
+    suspend fun getSavedUsername(): String? {
+        return context.dataStore.data.first()[USERNAME]
+    }
+
+    suspend fun getSavedPassword(): String? {
+        return context.dataStore.data.first()[PASSWORD]
+    }
+
     suspend fun clearTokens() {
         context.dataStore.edit { prefs ->
             prefs.remove(ACCESS_TOKEN)
             prefs.remove(REFRESH_TOKEN)
+            prefs.remove(PASSWORD)
         }
     }
 
@@ -120,5 +139,21 @@ class AuthStore @Inject constructor(
 
     suspend fun getRefreshTokenBlocking(): String? {
         return context.dataStore.data.first()[REFRESH_TOKEN]
+    }
+
+    suspend fun setShareLogoText(text: String) {
+        context.dataStore.edit { prefs -> prefs[SHARE_LOGO_TEXT] = text }
+    }
+
+    suspend fun getShareLogoText(): String {
+        return context.dataStore.data.first()[SHARE_LOGO_TEXT] ?: "分享来自 Open Note"
+    }
+
+    suspend fun setShareWatermark(text: String) {
+        context.dataStore.edit { prefs -> prefs[SHARE_WATERMARK] = text }
+    }
+
+    suspend fun getShareWatermark(): String {
+        return context.dataStore.data.first()[SHARE_WATERMARK] ?: "备忘录"
     }
 }

@@ -36,6 +36,32 @@ class LoginViewModel @Inject constructor(
     private val _isRegisterMode = MutableStateFlow(false)
     val isRegisterMode: StateFlow<Boolean> = _isRegisterMode
 
+    private val _savedUsername = MutableStateFlow("")
+    val savedUsername: StateFlow<String> = _savedUsername
+
+    private val _savedPassword = MutableStateFlow("")
+    val savedPassword: StateFlow<String> = _savedPassword
+
+    init {
+        viewModelScope.launch {
+            _savedUsername.value = authStore.getSavedUsername() ?: ""
+            _savedPassword.value = authStore.getSavedPassword() ?: ""
+            tryAutoLogin()
+        }
+    }
+
+    private suspend fun tryAutoLogin() {
+        val user = _savedUsername.value
+        val pass = _savedPassword.value
+        if (user.isBlank() || pass.isBlank()) return
+        val result = authRepository.login(user, pass)
+        if (result.isSuccess) {
+            _isLoading.value = false
+            _navigateToMain.emit(Unit)
+        }
+        // If auto-login fails, stay on login page with pre-filled fields
+    }
+
     fun toggleMode() {
         _isRegisterMode.value = !_isRegisterMode.value
         _error.value = null
