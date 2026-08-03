@@ -25,6 +25,9 @@ class SettingsViewModel @Inject constructor(
         url ?: "http://10.0.2.2:5000/api/"
     }.stateIn(viewModelScope, SharingStarted.Eagerly, "http://10.0.2.2:5000/api/")
 
+    val username: StateFlow<String> = authStore.username.map { it ?: "Open Note User" }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, "Open Note User")
+
     private val _logoutEvent = MutableSharedFlow<Unit>()
     val logoutEvent: SharedFlow<Unit> = _logoutEvent
 

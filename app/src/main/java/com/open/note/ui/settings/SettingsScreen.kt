@@ -70,6 +70,7 @@ fun SettingsScreen(
 ) {
     val notebooks by settingsViewModel.notebooks.collectAsState()
     val serverUrl by settingsViewModel.serverUrl.collectAsState()
+    val username by settingsViewModel.username.collectAsState()
     val skin by skinViewModel.selectedSkin.collectAsState()
     val skins = skinViewModel.getAllSkins()
 
@@ -119,7 +120,7 @@ fun SettingsScreen(
                     Spacer(modifier = Modifier.width(16.dp))
                     Column {
                         Text(
-                            text = "Open Notes User",
+                            text = username,
                             fontWeight = FontWeight.SemiBold,
                             fontSize = 16.sp
                         )
