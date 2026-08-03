@@ -1,6 +1,6 @@
 
 # Open Note
- ## Here also has English README.md 
+ ## Here also has English README.md https://github.com/3588044667HZ/OpenNote-Android/blob/main/README_EN.md
 原生 Android 便签应用，支持富文本编辑、护眼皮肤、暗色模式、分享为图片等功能。基于 Jetpack Compose + WebView 构建。
 
 ## 功能特性
