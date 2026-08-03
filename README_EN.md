@@ -67,11 +67,7 @@ cd android-app
 ### Server Setup
 The app connects to a REST API server. Default URL: `http://10.0.2.2:5000/api/` (Android emulator).
 
-```bash
-cd mock-server
-pip install flask flask-cors
-python server.py
-```
+Please see https://github.com/3588044667HZ/open-note-server
 
 Change the server URL from the login screen (gear icon) or Settings page.
 
