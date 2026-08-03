@@ -91,12 +91,12 @@ class AuthRepository @Inject constructor(
         return try {
             Log.d(TAG, "Logging out")
             val response = authApi.logout()
-            authStore.clear()
+            authStore.clearTokens()
             Log.d(TAG, "Logout successful")
             Result.success(Unit)
         } catch (e: Exception) {
             Log.e(TAG, "Logout error", e)
-            authStore.clear()
+            authStore.clearTokens()
             Result.failure(e)
         }
     }

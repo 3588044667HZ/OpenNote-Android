@@ -95,6 +95,7 @@ class AuthStore @Inject constructor(
         context.dataStore.edit { prefs ->
             prefs.remove(ACCESS_TOKEN)
             prefs.remove(REFRESH_TOKEN)
+            prefs.remove(PASSWORD)
         }
     }
 

@@ -260,6 +260,48 @@ fun SettingsScreen(
 
         item {
             Text(
+                "SERVER",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(bottom = 4.dp)
+            )
+        }
+
+        item {
+            val act = androidx.compose.ui.platform.LocalContext.current
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("API Server", style = MaterialTheme.typography.bodyMedium)
+                        Text(serverUrl, style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    IconButton(onClick = {
+                        act.startActivity(android.content.Intent(act, NetworkSettingsActivity::class.java))
+                    }) {
+                        Icon(painterResource(R.drawable.ic_sync), contentDescription = "Change Server",
+                            tint = MaterialTheme.colorScheme.primary)
+                    }
+                }
+            }
+        }
+
+        item {
+            Spacer(modifier = Modifier.height(8.dp))
+            Divider()
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+
+        item {
+            Text(
                 "SHARE SETTINGS",
                 style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.SemiBold,

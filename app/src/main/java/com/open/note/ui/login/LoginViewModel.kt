@@ -46,7 +46,20 @@ class LoginViewModel @Inject constructor(
         viewModelScope.launch {
             _savedUsername.value = authStore.getSavedUsername() ?: ""
             _savedPassword.value = authStore.getSavedPassword() ?: ""
+            tryAutoLogin()
         }
+    }
+
+    private suspend fun tryAutoLogin() {
+        val user = _savedUsername.value
+        val pass = _savedPassword.value
+        if (user.isBlank() || pass.isBlank()) return
+        val result = authRepository.login(user, pass)
+        if (result.isSuccess) {
+            _isLoading.value = false
+            _navigateToMain.emit(Unit)
+        }
+        // If auto-login fails, stay on login page with pre-filled fields
     }
 
     fun toggleMode() {
