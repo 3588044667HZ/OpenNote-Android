@@ -130,7 +130,13 @@ fun NoteEditorScreen(
         containerColor = skinBg,
         topBar = {
             TopAppBar(
-                title = { },
+                title = {
+                    Text(
+                        "$contentLength",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = { editorViewModel.saveNow(); onBack() }) {
                         Icon(Icons.Filled.KeyboardArrowLeft, contentDescription = "Back")
@@ -195,21 +201,9 @@ fun NoteEditorScreen(
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = skinBg)
             )
-        },
-        bottomBar = {
-            Surface(tonalElevation = 2.dp, color = skinBg) {
-                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("$contentLength/10000", style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    if (isDirty) Text("Unsaved", style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary)
-                }
-            }
         }
     ) { padding ->
         Column(Modifier.padding(padding).imePadding().fillMaxSize()) {
-            EditorToolbarRow(webView = webView)
             AndroidView(
                 factory = { ctx ->
                     WebView(ctx).apply {
@@ -250,6 +244,7 @@ fun NoteEditorScreen(
                     }.also { webView = it }
                 },
                 modifier = Modifier.weight(1f).fillMaxWidth())
+            EditorToolbarRow(webView = webView)
         }
     }
 
