@@ -6,12 +6,22 @@ import android.content.Intent
 import android.content.res.Configuration
 import android.os.Bundle
 import android.util.Log
+import android.view.View
 import android.webkit.ConsoleMessage
 import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.compose.foundation.shape.RoundedCornerShape
+import java.io.File
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -27,6 +37,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
@@ -59,6 +70,7 @@ class NoteEditorActivity : ComponentActivity() {
         skinManager.refreshSkin()
     }
     override fun onCreate(savedInstanceState: Bundle?) {
+        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         val noteId = intent.getStringExtra(EXTRA_NOTE_ID)
         setContent { MaterialTheme { NoteEditorScreen(noteId = noteId, onBack = { finish() }) } }
@@ -86,9 +98,31 @@ fun NoteEditorScreen(
     val skinBg = SkinColors.parseColor(skin.backCloth)
     val skinCardBg = SkinColors.parseColor(skin.cardBackground)
 
+    val context = LocalContext.current
+    val density = LocalDensity.current
+    val imeVisible = WindowInsets.ime.getBottom(density) > 0
     val editorBridge = remember { EditorBridge() }
     var webView by remember { mutableStateOf<WebView?>(null) }
     var showDeleteDialog by remember { mutableStateOf(false) }
+    var colorPickerMode by remember { mutableStateOf<PickerMode?>(null) }
+    val attachmentDao = remember {
+        dagger.hilt.android.EntryPointAccessors.fromApplication(
+            context.applicationContext,
+            com.open.note.di.AttachmentEntryPoint::class.java
+        ).attachmentDao()
+    }
+
+    val imagePicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        uri ?: return@rememberLauncherForActivityResult
+        val noteKey = noteId ?: "draft"
+        MainScope().launch {
+            com.open.note.share.AttachmentManager(
+                context, attachmentDao, webView
+            ).insertImage(uri, noteKey)
+        }
+    }
 
     LaunchedEffect(noteId) { editorViewModel.initialize(noteId) }
     LaunchedEffect(skin) {
@@ -128,6 +162,7 @@ fun NoteEditorScreen(
 
     Scaffold(
         containerColor = skinBg,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
                 title = {
@@ -138,28 +173,33 @@ fun NoteEditorScreen(
                     )
                 },
                 navigationIcon = {
-                    IconButton(onClick = { editorViewModel.saveNow(); onBack() }) {
-                        Icon(Icons.Filled.KeyboardArrowLeft, contentDescription = "Back")
+                    IconButton(onClick = { editorViewModel.saveNow(); onBack() },
+                        modifier = Modifier.size(32.dp)) {
+                        Icon(Icons.Filled.KeyboardArrowLeft, contentDescription = "Back",
+                            modifier = Modifier.size(20.dp))
                     }
                 },
                 actions = {
                     var showMore by remember { mutableStateOf(false) }
 
                     NotebookDropdown(notebooks, selectedNotebookId) { editorViewModel.onNotebookSelected(it) }
-                    IconButton(onClick = { editorViewModel.saveNow() }) {
+                    IconButton(onClick = { editorViewModel.saveNow() },
+                        modifier = Modifier.size(32.dp)) {
                         Icon(painterResource(R.drawable.ic_check2), contentDescription = "Save",
-                            tint = if (isDirty) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+                            tint = if (isDirty) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(18.dp))
                     }
                     IconButton(onClick = {
                         webView?.context?.let { ctx -> doShareAsImage(webView!!, skin, ctx, title) }
-                    }) {
+                    }, modifier = Modifier.size(32.dp)) {
                         Icon(painterResource(R.drawable.ic_share), contentDescription = "Share",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(18.dp))
                     }
                     Box {
-                        IconButton(onClick = { showMore = true }) {
+                        IconButton(onClick = { showMore = true }, modifier = Modifier.size(32.dp)) {
                             Icon(painterResource(R.drawable.ic_more_vertical), contentDescription = "More",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
                         }
                         DropdownMenu(expanded = showMore, onDismissRequest = { showMore = false },
                             modifier = Modifier.background(skinCardBg)) {
@@ -203,7 +243,12 @@ fun NoteEditorScreen(
             )
         }
     ) { padding ->
-        Column(Modifier.padding(padding).imePadding().fillMaxSize()) {
+        Column(
+            Modifier
+                .padding(padding)
+                .windowInsetsPadding(WindowInsets.navigationBars.union(WindowInsets.ime))
+                .fillMaxSize()
+        ) {
             AndroidView(
                 factory = { ctx ->
                     WebView(ctx).apply {
@@ -213,10 +258,18 @@ fun NoteEditorScreen(
                         settings.javaScriptEnabled = true
                         settings.domStorageEnabled = true
                         settings.databaseEnabled = true
-                        settings.allowFileAccess = true
+                        settings.allowFileAccess = false
                         settings.cacheMode = android.webkit.WebSettings.LOAD_DEFAULT
                         settings.useWideViewPort = true
                         settings.loadWithOverviewMode = true
+                        settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                        try {
+                            val method = View::class.java.getMethod(
+                                "setFocusHighlightColor", Int::class.javaPrimitiveType
+                            )
+                            method.invoke(this, android.graphics.Color.TRANSPARENT)
+                        } catch (_: Exception) {}
+                        @Suppress("JavascriptInterface")
                         addJavascriptInterface(editorBridge, "__nativeBridge")
                         webChromeClient = object : WebChromeClient() {
                             override fun onConsoleMessage(msg: ConsoleMessage): Boolean {
@@ -224,7 +277,27 @@ fun NoteEditorScreen(
                                 return true
                             }
                         }
+                        val assetLoader = androidx.webkit.WebViewAssetLoader.Builder()
+                            .addPathHandler("/assets/", androidx.webkit.WebViewAssetLoader.AssetsPathHandler(ctx))
+                            .build()
                         webViewClient = object : WebViewClient() {
+                            override fun shouldInterceptRequest(
+                                view: WebView,
+                                request: android.webkit.WebResourceRequest
+                            ): android.webkit.WebResourceResponse? {
+                                val url = request.url.toString()
+                                val placeholderMarker = "_placeholder.png"
+                                val idx = url.indexOf(placeholderMarker)
+                                if (idx >= 0) {
+                                    val path = url.substring(url.indexOf('/') + 1, idx + placeholderMarker.length)
+                                    val file = File(ctx.filesDir, path)
+                                    if (file.exists() && file.length() > 0) {
+                                        return android.webkit.WebResourceResponse(
+                                            "image/webp", "UTF-8", file.inputStream())
+                                    }
+                                }
+                                return assetLoader.shouldInterceptRequest(request.url)
+                            }
                             override fun onPageFinished(view: WebView, url: String) {
                                 view.evaluateJavascript("typeof window.__setContent") { result ->
                                     if (result == "\"function\"") {
@@ -240,12 +313,68 @@ fun NoteEditorScreen(
                                 Log.e("WebView", "Page load error: ${error?.description}")
                             }
                         }
-                        loadUrl("file:///android_asset/editor.html")
+                        loadUrl("https://appassets.androidplatform.net/assets/editor.html")
                     }.also { webView = it }
                 },
                 modifier = Modifier.weight(1f).fillMaxWidth())
-            EditorToolbarRow(webView = webView)
+            EditorToolbarRow(webView = webView, bgColor = skinBg, imeVisible = imeVisible,
+                onInsertImage = {
+                    imagePicker.launch(androidx.activity.result.PickVisualMediaRequest(
+                        ActivityResultContracts.PickVisualMedia.ImageOnly
+                    ))
+                },
+                onTextColor = { colorPickerMode = PickerMode.TEXT_COLOR },
+                onHighlight = { colorPickerMode = PickerMode.HIGHLIGHT },
+                onSolidUnderline = { colorPickerMode = PickerMode.SOLID_UNDERLINE },
+                onWavyUnderline = { colorPickerMode = PickerMode.WAVY_UNDERLINE })
         }
+    }
+
+    if (colorPickerMode != null) {
+        TextColorPickerSheet(
+            mode = colorPickerMode!!,
+            onColorSelected = { colorVar ->
+                val colorName = colorVar.removePrefix("--").removeSuffix("Color").lowercase()
+                when (colorPickerMode) {
+                    PickerMode.TEXT_COLOR ->
+                        webView?.evaluateJavascript("window.editor.setTextColor('$colorVar')") { r ->
+                            if (r == "null") Log.w("Editor", "setTextColor null")
+                        }
+                    PickerMode.HIGHLIGHT ->
+                        webView?.evaluateJavascript("window.editor.setHighlight('$colorName')") { r ->
+                            if (r == "null") Log.w("Editor", "setHighlight null")
+                        }
+                    PickerMode.SOLID_UNDERLINE ->
+                        webView?.evaluateJavascript("window.editor.toggleColoredUnderline('solid','$colorName')") { r ->
+                            if (r == "null") Log.w("Editor", "toggleColoredUnderline null")
+                        }
+                    PickerMode.WAVY_UNDERLINE ->
+                        webView?.evaluateJavascript("window.editor.toggleColoredUnderline('wavy','$colorName')") { r ->
+                            if (r == "null") Log.w("Editor", "toggleWavy null")
+                        }
+                    null -> {}
+                }
+                colorPickerMode = null
+            },
+            onClearColor = {
+                when (colorPickerMode) {
+                    PickerMode.TEXT_COLOR ->
+                        webView?.evaluateJavascript("window.editor.unsetTextColor()") { r ->
+                            if (r == "null") Log.w("Editor", "unsetTextColor null")
+                        }
+                    PickerMode.HIGHLIGHT ->
+                        webView?.evaluateJavascript("window.editor.unsetHighlight()") { r ->
+                            if (r == "null") Log.w("Editor", "unsetHighlight null")
+                        }
+                    else ->
+                        webView?.evaluateJavascript("window.editor.toggleColoredUnderline('solid','default')") { r ->
+                            if (r == "null") Log.w("Editor", "unsetUnderline null")
+                        }
+                }
+                colorPickerMode = null
+            },
+            onDismiss = { colorPickerMode = null }
+        )
     }
 
     if (showDeleteDialog) {
@@ -260,25 +389,217 @@ fun NoteEditorScreen(
 }
 
 @Composable
-fun EditorToolbarRow(webView: WebView?) {
-    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
-        ToolBtn("B") { webView?.evaluateJavascript("editor.chain().focus().toggleBold().run()", null) }
-        ToolBtn("I") { webView?.evaluateJavascript("editor.chain().focus().toggleItalic().run()", null) }
-        ToolBtn("U") { webView?.evaluateJavascript("editor.chain().focus().toggleUnderline().run()", null) }
-        ToolBtn("S") { webView?.evaluateJavascript("editor.chain().focus().toggleStrike().run()", null) }
-        ToolBtn("H1") { webView?.evaluateJavascript("editor.chain().focus().toggleHeading({level:1}).run()", null) }
-        ToolBtn("H2") { webView?.evaluateJavascript("editor.chain().focus().toggleHeading({level:2}).run()", null) }
-        ToolBtn("\u2022") { webView?.evaluateJavascript("editor.chain().focus().toggleBulletList().run()", null) }
-        ToolBtn("1.") { webView?.evaluateJavascript("editor.chain().focus().toggleOrderedList().run()", null) }
-        ToolBtn("\"") { webView?.evaluateJavascript("editor.chain().focus().toggleBlockquote().run()", null) }
+fun EditorToolbarRow(
+    webView: WebView?,
+    onInsertImage: () -> Unit = {},
+    onTextColor: () -> Unit = {},
+    onHighlight: () -> Unit = {},
+    onSolidUnderline: () -> Unit = {},
+    onWavyUnderline: () -> Unit = {},
+    bgColor: Color = Color.Transparent,
+    imeVisible: Boolean = false
+) {
+    var showFormatBar by remember { mutableStateOf(false) }
+
+    Surface(color = bgColor) {
+        Column {
+            // 横向格式栏：IME 存在时替换 IME，不存在时直接展开
+            AnimatedVisibility(
+                visible = showFormatBar,
+                enter = slideInVertically { it },
+                exit = slideOutVertically { it }
+            ) {
+                FormatBarRow(
+                    webView = webView,
+                    onTextColor = onTextColor,
+                    onHighlight = onHighlight,
+                    onSolidUnderline = onSolidUnderline,
+                    onWavyUnderline = onWavyUnderline,
+                    bgColor = bgColor
+                )
+            }
+
+            // 主工具栏行
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(40.dp)
+                    .padding(horizontal = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                ToolIconBtn(painterResource(R.drawable.ic_fonts)) {
+                    // 如果 IME 弹出则先收起键盘（替换 IME 位置）
+                    if (imeVisible) {
+                        webView?.clearFocus()
+                        webView?.postDelayed({ showFormatBar = !showFormatBar }, 150)
+                    } else {
+                        showFormatBar = !showFormatBar
+                    }
+                }
+                ToolIconBtn(painterResource(R.drawable.ic_image_fill)) { onInsertImage() }
+            }
+        }
     }
 }
 
 @Composable
-fun ToolBtn(label: String, onClick: () -> Unit) {
-    TextButton(onClick = onClick, modifier = Modifier.padding(horizontal = 2.dp),
-        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)) {
-        Text(label, style = MaterialTheme.typography.bodySmall) }
+fun FormatBarRow(
+    webView: WebView?,
+    onTextColor: () -> Unit,
+    onHighlight: () -> Unit,
+    onSolidUnderline: () -> Unit,
+    onWavyUnderline: () -> Unit,
+    bgColor: Color
+) {
+    Surface(color = bgColor) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(48.dp)
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            FormatIconBtn(R.drawable.ic_format_bold) {
+                webView?.evaluateJavascript("editor.chain().focus().toggleBold().run()", null)
+            }
+            FormatIconBtn(R.drawable.ic_format_italic) {
+                webView?.evaluateJavascript("editor.chain().focus().toggleItalic().run()", null)
+            }
+            FormatIconBtn(R.drawable.ic_format_underline) {
+                webView?.evaluateJavascript(
+                    "editor.chain().focus().toggleColoredUnderline({type:'solid',color:'color_default'}).run()",
+                    null)
+            }
+            FormatIconBtn(R.drawable.ic_format_strike) {
+                webView?.evaluateJavascript("editor.chain().focus().toggleStrike().run()", null)
+            }
+            Divider(modifier = Modifier.height(24.dp).width(1.dp))
+            FormatIconBtn(R.drawable.ic_format_h1) {
+                webView?.evaluateJavascript("editor.chain().focus().toggleHeading({level:1}).run()", null)
+            }
+            FormatIconBtn(R.drawable.ic_format_h2) {
+                webView?.evaluateJavascript("editor.chain().focus().toggleHeading({level:2}).run()", null)
+            }
+            Divider(modifier = Modifier.height(24.dp).width(1.dp))
+            FormatIconBtn(R.drawable.ic_format_list_ul) {
+                webView?.evaluateJavascript("editor.chain().focus().toggleBulletList().run()", null)
+            }
+            FormatIconBtn(R.drawable.ic_format_list_ol) {
+                webView?.evaluateJavascript("editor.chain().focus().toggleOrderedList().run()", null)
+            }
+            FormatIconBtn(R.drawable.ic_format_quote) {
+                webView?.evaluateJavascript("editor.chain().focus().toggleBlockquote().run()", null)
+            }
+            Divider(modifier = Modifier.height(24.dp).width(1.dp))
+            FormatIconBtn(R.drawable.ic_fonts) { onTextColor() }
+            FormatIconBtn(R.drawable.ic_format_highlight) { onHighlight() }
+            FormatIconBtn(R.drawable.ic_format_underline_color) { onSolidUnderline() }
+            FormatIconBtn(R.drawable.ic_format_wavy) { onWavyUnderline() }
+        }
+    }
+}
+
+@Composable
+fun FormatIconBtn(iconRes: Int, onClick: () -> Unit) {
+    IconButton(
+        onClick = onClick,
+        modifier = Modifier.size(40.dp)
+    ) {
+        Icon(
+            painter = painterResource(iconRes),
+            contentDescription = null,
+            modifier = Modifier.size(24.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+fun ToolIconBtn(icon: androidx.compose.ui.graphics.painter.Painter, onClick: () -> Unit) {
+    IconButton(
+        onClick = onClick,
+        modifier = Modifier.size(32.dp)
+    ) {
+        Icon(
+            painter = icon,
+            contentDescription = null,
+            modifier = Modifier.size(20.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+/**
+ * 文字颜色选择 BottomSheet —— 全屏宽度网格，适配手机操作
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun TextColorPickerSheet(
+    mode: PickerMode,
+    onColorSelected: (String) -> Unit,
+    onClearColor: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val colors = listOf(
+        "--blueColor" to Color(0xFF1A73E8),
+        "--redColor" to Color(0xFFEA4335),
+        "--greenColor" to Color(0xFF34A853),
+        "--orangeColor" to Color(0xFFFB9600),
+        "--yellowColor" to Color(0xFFF9AB00),
+        "--grayColor" to Color(0xFF5F6368)
+    )
+
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 32.dp)
+        ) {
+            Text(
+                when (mode) {
+                    PickerMode.TEXT_COLOR -> "Text Color"
+                    PickerMode.HIGHLIGHT -> "Highlight Color"
+                    PickerMode.SOLID_UNDERLINE -> "Underline Color"
+                    PickerMode.WAVY_UNDERLINE -> "Wavy Underline Color"
+                },
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(bottom = 16.dp)
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                colors.forEach { (name, color) ->
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { onColorSelected(name) }
+                            .padding(8.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(color)
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            name.removePrefix("--").removeSuffix("Color"),
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            TextButton(onClick = onClearColor, modifier = Modifier.fillMaxWidth()) {
+                Text("No Color")
+            }
+        }
+    }
 }
 
 @Composable
@@ -330,4 +651,12 @@ fun doShareAsImage(webView: WebView, skin: com.open.note.data.skin.Skin, ctx: Co
         }
         ctx.startActivity(intent)
     }
+}
+
+/** 颜色选择面板模式 */
+enum class PickerMode {
+    TEXT_COLOR,        // 文字颜色
+    HIGHLIGHT,         // 高亮背景
+    SOLID_UNDERLINE,   // 有色实线下划线
+    WAVY_UNDERLINE     // 有色波浪线
 }

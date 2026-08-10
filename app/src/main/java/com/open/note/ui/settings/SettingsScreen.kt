@@ -58,6 +58,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.open.note.data.local.entity.Folder
 import com.open.note.data.skin.SkinColors
 import com.open.note.data.skin.SkinData
+import com.open.note.BuildConfig
 import com.open.note.R
 import com.open.note.ui.skin.SkinViewModel
 import kotlinx.coroutines.launch
@@ -125,7 +126,7 @@ fun SettingsScreen(
                             fontSize = 16.sp
                         )
                         Text(
-                            text = "1.0.0",
+                            text = BuildConfig.VERSION_NAME,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -409,7 +410,7 @@ fun SettingsScreen(
                 elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    AboutRow("Version", "1.0.0")
+                    AboutRow("Version", BuildConfig.VERSION_NAME)
                     Spacer(modifier = Modifier.height(4.dp))
                     AboutRow("API", serverUrl)
                 }

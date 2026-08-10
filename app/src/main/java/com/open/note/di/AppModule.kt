@@ -6,7 +6,9 @@ import com.open.note.data.local.AppDatabase
 import com.open.note.data.local.AuthStore
 import com.open.note.data.local.dao.FolderDao
 import com.open.note.data.local.dao.NoteDao
+import com.open.note.data.local.dao.AttachmentDao
 import com.open.note.data.remote.api.AuthApi
+import com.open.note.data.remote.api.AttachmentApi
 import com.open.note.data.remote.api.NoteApi
 import com.open.note.data.remote.api.NotebookApi
 import com.open.note.data.remote.api.ShareSettingsApi
@@ -42,6 +44,9 @@ object AppModule {
 
     @Provides
     fun provideFolderDao(db: AppDatabase): FolderDao = db.folderDao()
+
+    @Provides
+    fun provideAttachmentDao(db: AppDatabase): AttachmentDao = db.attachmentDao()
 
     @Provides
     @Singleton
@@ -92,4 +97,8 @@ object AppModule {
     @Provides
     @Singleton
     fun provideShareSettingsApi(retrofit: Retrofit): ShareSettingsApi = retrofit.create(ShareSettingsApi::class.java)
+
+    @Provides
+    @Singleton
+    fun provideAttachmentApi(retrofit: Retrofit): AttachmentApi = retrofit.create(AttachmentApi::class.java)
 }

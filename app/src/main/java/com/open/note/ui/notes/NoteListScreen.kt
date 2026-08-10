@@ -249,8 +249,13 @@ fun NoteCard(
                 }
 
                 if (note.content.isNotEmpty()) {
+                    val preview = remember(note.content, textColor) {
+                        val spannable = com.open.note.render.HtmlToSpannableParser
+                            .parse(note.content.take(500))
+                        com.open.note.render.SpannedToAnnotated.convert(spannable)
+                    }
                     Text(
-                        text = note.content.take(100).replace("\n", " "),
+                        text = preview,
                         fontSize = 14.sp,
                         color = textColor,
                         maxLines = 2,

@@ -91,3 +91,25 @@ data class Pagination(
 )
 
 typealias NoteListResponse = PaginatedListResponse<NoteDto>
+
+data class AttachmentDto(
+    val attachId: String? = null,
+    val noteId: String? = null,
+    val type: Int = 0,
+    val fileName: String? = null,
+    val fileId: String? = null,
+    val width: Int = 0,
+    val height: Int = 0,
+    val md5: String = "",
+    val url: String = "",
+    val state: Int = 0,
+    val createdAt: String? = null
+)
+
+data class FileUploadResponse(
+    val fileId: String? = null,
+    val url: String? = null,
+    val width: Int = 0,
+    val height: Int = 0,
+    val md5: String = ""
+)

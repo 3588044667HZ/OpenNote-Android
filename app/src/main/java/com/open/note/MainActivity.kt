@@ -5,6 +5,7 @@ import android.content.res.Configuration
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -13,6 +14,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.open.note.data.skin.SkinColors
 import com.open.note.data.skin.SkinManager
@@ -36,6 +38,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         setContent {
             MaterialTheme {
@@ -75,13 +78,11 @@ fun MainScreen(
         containerColor = skinBg,
         topBar = {
             TopAppBar(
-                title = {
-                    Text(when (selectedTab) {
-                        BottomTab.Notes -> "Notes"
-                        BottomTab.Trash -> "Trash"
-                        BottomTab.Settings -> "Settings"
-                    })
-                },
+                title = { Text(when (selectedTab) {
+                    BottomTab.Notes -> "Notes"
+                    BottomTab.Trash -> "Trash"
+                    BottomTab.Settings -> "Settings"
+                }) },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = skinBg)
             )
         },
@@ -105,7 +106,7 @@ fun MainScreen(
             }
         }
     ) { padding ->
-        Box(modifier = Modifier.padding(padding)) {
+        Box(modifier = Modifier.padding(padding).consumeWindowInsets(padding)) {
             when (selectedTab) {
                 BottomTab.Notes -> NoteListScreen(
                     onNoteClick = { noteId -> onOpenEditor(noteId) },

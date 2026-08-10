@@ -13,6 +13,10 @@
         android:theme="@style/Theme.OpenNote"
         android:usesCleartextTraffic="true">
 
+        <meta-data
+            android:name="android.max_aspect"
+            android:value="2.5" />
+
         <activity
             android:name=".ui.login.LoginActivity"
             android:exported="true"
