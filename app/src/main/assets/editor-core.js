@@ -259,6 +259,9 @@
       return editor
         ? editor.isActive('coloredUnderline', { type: type, color: 'color_' + colorName })
         : false;
+    },
+    unsetColoredUnderline: function() {
+      if (editor) editor.chain().focus().unsetColoredUnderline().run();
     }
   };
 

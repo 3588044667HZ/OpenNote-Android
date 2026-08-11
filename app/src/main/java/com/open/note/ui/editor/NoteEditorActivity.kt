@@ -285,12 +285,13 @@ fun NoteEditorScreen(
                                 view: WebView,
                                 request: android.webkit.WebResourceRequest
                             ): android.webkit.WebResourceResponse? {
-                                val url = request.url.toString()
+                                // 用 path 部分（不含域名），形如 /{noteId}/{attachId}_placeholder.png
+                                val path = request.url.path ?: ""
                                 val placeholderMarker = "_placeholder.png"
-                                val idx = url.indexOf(placeholderMarker)
-                                if (idx >= 0) {
-                                    val path = url.substring(url.indexOf('/') + 1, idx + placeholderMarker.length)
-                                    val file = File(ctx.filesDir, path)
+                                val idx = path.indexOf(placeholderMarker)
+                                if (idx > 0) {
+                                    val relative = path.substring(1, idx + placeholderMarker.length)
+                                    val file = File(ctx.filesDir, relative)
                                     if (file.exists() && file.length() > 0) {
                                         return android.webkit.WebResourceResponse(
                                             "image/webp", "UTF-8", file.inputStream())
@@ -367,8 +368,8 @@ fun NoteEditorScreen(
                             if (r == "null") Log.w("Editor", "unsetHighlight null")
                         }
                     else ->
-                        webView?.evaluateJavascript("window.editor.toggleColoredUnderline('solid','default')") { r ->
-                            if (r == "null") Log.w("Editor", "unsetUnderline null")
+                        webView?.evaluateJavascript("window.editor.unsetColoredUnderline()") { r ->
+                            if (r == "null") Log.w("Editor", "unsetColoredUnderline null")
                         }
                 }
                 colorPickerMode = null
