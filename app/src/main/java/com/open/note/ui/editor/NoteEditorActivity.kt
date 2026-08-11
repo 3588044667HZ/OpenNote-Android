@@ -232,6 +232,15 @@ fun NoteEditorScreen(
                                 onClick = { editorViewModel.togglePin(); showMore = false }
                             )
                             DropdownMenuItem(
+                                text = { Text("Export Word") },
+                                leadingIcon = { Icon(Icons.Filled.Description, contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                                onClick = {
+                                    showMore = false
+                                    exportToWord(context, webView, title, content)
+                                }
+                            )
+                            DropdownMenuItem(
                                 text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
                                 leadingIcon = { Icon(Icons.Filled.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
                                 onClick = { showDeleteDialog = true; showMore = false }
@@ -628,6 +637,49 @@ fun ColorDots(selectedColor: String, onColorSelected: (String) -> Unit) {
             val isSelected = key == selectedColor
             Box(Modifier.size(if (isSelected) 24.dp else 20.dp).clip(CircleShape)
                 .background(color).clickable { onColorSelected(key) }) }
+    }
+}
+
+/** 导出笔记为 .docx 并分享 */
+fun exportToWord(ctx: Context, webView: WebView?, noteTitle: String, noteContent: String) {
+    if (webView == null) return
+    val title = noteTitle.ifBlank { "Untitled" }
+    // 从编辑器获取最新 HTML（含标题 h1 + 正文）
+    webView.evaluateJavascript("window.__getHtml()") { result ->
+        // evaluateJavascript 返回 JSON 编码字符串，必须用 JSONTokener 解码（还原 \u003c 等转义）
+        val html = runCatching {
+            org.json.JSONTokener(result).nextValue() as? String ?: ""
+        }.getOrElse { result?.removeSurrounding("\"") ?: "" }
+        val contentHtml = if (html.isNotBlank()) html
+            else "<h1>$title</h1><p>$noteContent</p>"
+        android.util.Log.d("ExportWord", "HTML length=${html.length}, blank=${html.isBlank()}, head=${html.take(200)}")
+
+        MainScope().launch {
+            try {
+                val file = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    val safeName = title.replace(Regex("""[\\/:*?"<>|]"""), "_")
+                    val f = java.io.File(ctx.cacheDir, "$safeName.docx")
+                    com.open.note.render.Html2Docx.convert(
+                        html = contentHtml,
+                        title = title,
+                        images = emptyList(),
+                        outputFile = f
+                    )
+                    f
+                }
+                val uri = androidx.core.content.FileProvider.getUriForFile(
+                    ctx, "${ctx.packageName}.fileprovider", file)
+                val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                    type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                    addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                ctx.startActivity(android.content.Intent.createChooser(intent, "导出 Word"))
+            } catch (e: Exception) {
+                android.util.Log.e("ExportWord", "Export failed", e)
+                android.widget.Toast.makeText(ctx, "导出失败: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 }
 
