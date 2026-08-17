@@ -47,8 +47,8 @@ fun TrashScreen(
                 items(trashNotes, key = { it.localId }) { note ->
                     TrashItem(
                         note = note,
-                        onRecover = { viewModel.recoverNote(note.serverId ?: return@TrashItem) },
-                        onPermanentDelete = { viewModel.permanentlyDeleteNote(note.serverId ?: return@TrashItem) }
+                        onRecover = { viewModel.recoverNote(note.localId, note.serverId) },
+                        onPermanentDelete = { viewModel.permanentlyDeleteNote(note.localId, note.serverId) }
                     )
                 }
             }

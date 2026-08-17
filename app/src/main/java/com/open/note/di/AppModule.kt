@@ -36,8 +36,47 @@ object AppModule {
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): AppDatabase =
         Room.databaseBuilder(context, AppDatabase::class.java, "open_note.db")
-            .fallbackToDestructiveMigration()
+            .addMigrations(MIGRATION_3_4)
             .build()
+
+    /**
+     * v3 → v4：is_pending_sync 列迁移为 state 四态。
+     * 待同步或未上传 → 2 (MODIFIED)，其余 → 1 (SYNCED)
+     */
+    private val MIGRATION_3_4 = object : androidx.room.migration.Migration(3, 4) {
+        override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE notes RENAME TO notes_old")
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS notes (
+                    local_id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    server_id TEXT,
+                    title TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    notebook_id TEXT,
+                    color TEXT NOT NULL,
+                    is_pinned INTEGER NOT NULL,
+                    version INTEGER NOT NULL,
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL,
+                    deleted_at INTEGER,
+                    state INTEGER NOT NULL,
+                    last_server_update TEXT
+                )
+            """.trimIndent())
+            db.execSQL("CREATE INDEX IF NOT EXISTS index_notes_server_id ON notes(server_id)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS index_notes_notebook_id ON notes(notebook_id)")
+            db.execSQL("""
+                INSERT INTO notes (local_id, server_id, title, content, notebook_id, color, is_pinned,
+                    version, created_at, updated_at, deleted_at, state, last_server_update)
+                SELECT local_id, server_id, title, content, notebook_id, color, is_pinned,
+                    version, created_at, updated_at, deleted_at,
+                    CASE WHEN is_pending_sync = 1 OR server_id IS NULL THEN 2 ELSE 1 END,
+                    last_server_update
+                FROM notes_old
+            """.trimIndent())
+            db.execSQL("DROP TABLE notes_old")
+        }
+    }
 
     @Provides
     fun provideNoteDao(db: AppDatabase): NoteDao = db.noteDao()
@@ -47,6 +86,9 @@ object AppModule {
 
     @Provides
     fun provideAttachmentDao(db: AppDatabase): AttachmentDao = db.attachmentDao()
+
+    @Provides
+    fun provideNoteHistoryDao(db: AppDatabase): com.open.note.data.local.dao.NoteHistoryDao = db.noteHistoryDao()
 
     @Provides
     @Singleton

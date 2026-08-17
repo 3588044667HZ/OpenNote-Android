@@ -4,7 +4,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.open.note.data.local.entity.Folder
 import com.open.note.data.local.entity.Note
+import com.open.note.data.repository.ConflictException
 import com.open.note.data.repository.NoteRepository
+import com.open.note.data.repository.NotFoundException
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -12,12 +14,20 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+/** 编辑器保存冲突状态 */
+data class EditorConflict(
+    val noteId: String,
+    val message: String,
+    val remoteUpdatedAt: Long? = null
+)
+
 @HiltViewModel
 class NoteEditorViewModel @Inject constructor(
     private val noteRepository: NoteRepository
 ) : ViewModel() {
 
     private var noteId: String? = null
+    private var localNoteId: Long? = null
     private var initialized = false
 
     private val _note = MutableStateFlow<Note?>(null)
@@ -50,30 +60,43 @@ class NoteEditorViewModel @Inject constructor(
     private val _lastUpdatedAt = MutableStateFlow<String?>(null)
     val lastUpdatedAt: StateFlow<String?> = _lastUpdatedAt
 
+    private val _conflict = MutableStateFlow<EditorConflict?>(null)
+    val conflict: StateFlow<EditorConflict?> = _conflict
+
+    /** 重新检查发现笔记已在服务端永久删除 */
+    private val _conflictNoteMissing = MutableStateFlow(false)
+    val conflictNoteMissing: StateFlow<Boolean> = _conflictNoteMissing
+
     val notebooks: StateFlow<List<Folder>> = noteRepository.getActiveFolders()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private var saveJob: Job? = null
     private var contentLoaded = false
 
-    fun initialize(noteId: String?) {
+    fun initialize(noteId: String?, localNoteId: Long? = null) {
         if (initialized) return
         initialized = true
         this.noteId = noteId
+        this.localNoteId = localNoteId
 
-        if (noteId != null) {
-            viewModelScope.launch {
-                val existing = noteRepository.getNoteByServerId(noteId)
-                if (existing != null) {
-                    _note.value = existing
-                    _title.value = existing.title
-                    _content.value = existing.content
-                    _contentLength.value = existing.content.length
-                    _selectedColor.value = existing.color
-                    _selectedNotebookId.value = existing.notebookId
-                    _isPinned.value = existing.isPinned
-                    _lastUpdatedAt.value = existing.updatedAt.toString()
-                }
+        viewModelScope.launch {
+            // 优先按 localId（本地未上传笔记），否则按 serverId
+            val existing = if (localNoteId != null) {
+                noteRepository.getNoteById(localNoteId)
+            } else {
+                noteId?.let { noteRepository.getNoteByServerId(it) }
+            }
+            if (existing != null) {
+                _note.value = existing
+                _title.value = existing.title
+                _content.value = existing.content
+                _contentLength.value = existing.content.length
+                _selectedColor.value = existing.color
+                _selectedNotebookId.value = existing.notebookId
+                _isPinned.value = existing.isPinned
+                _lastUpdatedAt.value = existing.updatedAt.toString()
+                this@NoteEditorViewModel.noteId = existing.serverId
+                this@NoteEditorViewModel.localNoteId = existing.localId
             }
         }
     }
@@ -156,6 +179,15 @@ class NoteEditorViewModel @Inject constructor(
                     _isDirty.value = false
                     _lastUpdatedAt.value = updated.updatedAt.toString()
                 }
+                result.onFailure { ex ->
+                    if (ex is ConflictException) {
+                        // 409：弹冲突对话框（保留本地/采用远程/重新检查）
+                        _conflict.value = EditorConflict(
+                            noteId = currentNote.serverId ?: "",
+                            message = ex.message ?: "Conflict"
+                        )
+                    }
+                }
             } else {
                 val result = noteRepository.createNote(
                     title = _title.value,
@@ -175,10 +207,115 @@ class NoteEditorViewModel @Inject constructor(
         }
     }
 
+    // ============ 冲突解决动作 ============
+
+    fun dismissConflict() {
+        _conflict.value = null
+    }
+
+    fun dismissMissing() {
+        _conflictNoteMissing.value = false
+    }
+
+    /** 保留本地：不带 If-Match 强制覆盖远程 */
+    fun keepLocal() {
+        val note = _note.value ?: return
+        _conflict.value = null
+        viewModelScope.launch {
+            noteRepository.forceUpdateNote(note)
+                .onSuccess { updated ->
+                    _note.value = updated
+                    _isDirty.value = false
+                }
+                .onFailure { ex ->
+                    _conflict.value = EditorConflict(note.serverId ?: "", "覆盖失败: ${ex.message}")
+                }
+        }
+    }
+
+    /** 采用远程：拉取最新并覆盖本地（未保存内容丢弃） */
+    fun useRemote() {
+        val note = _note.value ?: return
+        viewModelScope.launch {
+            noteRepository.getNoteFromServer(note.serverId ?: "")
+                .onSuccess { remote ->
+                    _note.value = remote
+                    _title.value = remote.title
+                    _content.value = remote.content
+                    _contentLength.value = remote.content.length
+                    _selectedColor.value = remote.color
+                    _selectedNotebookId.value = remote.notebookId
+                    _isPinned.value = remote.isPinned
+                    _isDirty.value = false
+                    _conflict.value = null
+                }
+                .onFailure { ex ->
+                    _conflict.value = EditorConflict(note.serverId ?: "", "拉取失败: ${ex.message}")
+                }
+        }
+    }
+
+    /** 重新检查：只查当前笔记。404 → 切换"已永久删除"弹窗；内容同 → 自动采用；异 → 保持弹窗 */
+    fun recheckConflict() {
+        val note = _note.value ?: return
+        viewModelScope.launch {
+            noteRepository.getNoteFromServer(note.serverId ?: "")
+                .onSuccess { remote ->
+                    if (remote.title == _title.value && remote.content == _content.value) {
+                        _note.value = remote
+                        _isDirty.value = false
+                        _conflict.value = null
+                    } else {
+                        _conflict.value = EditorConflict(
+                            note.serverId ?: "",
+                            "此笔记在其他设备被修改",
+                            remote.updatedAt
+                        )
+                    }
+                }
+                .onFailure { ex ->
+                    if (ex is NotFoundException) {
+                        _conflict.value = null
+                        _conflictNoteMissing.value = true
+                    } else {
+                        _conflict.value = EditorConflict(note.serverId ?: "", "检查失败: ${ex.message}")
+                    }
+                }
+        }
+    }
+
+    /** 保留重传：服务端已永久删除 → 本地内容重建为新笔记 */
+    fun keepLocalAsNew() {
+        _conflictNoteMissing.value = false
+        viewModelScope.launch {
+            val result = noteRepository.createNote(
+                title = _title.value,
+                content = _content.value,
+                notebookId = _selectedNotebookId.value,
+                color = _selectedColor.value,
+                isPinned = _isPinned.value
+            )
+            result.onSuccess { created ->
+                _note.value = created
+                noteId = created.serverId
+                _isDirty.value = false
+            }
+        }
+    }
+
+    /** 从本地删除：跟随服务端删除 */
+    fun discardLocal() {
+        val note = _note.value ?: return
+        _conflictNoteMissing.value = false
+        viewModelScope.launch {
+            noteRepository.deleteNote(note.localId, note.serverId)
+        }
+    }
+
     fun deleteNote() {
         viewModelScope.launch {
-            val serverId = _note.value?.serverId ?: return@launch
-            noteRepository.deleteNote(serverId)
+            val note = _note.value ?: return@launch
+            noteRepository.deleteNote(note.localId, note.serverId)
         }
     }
 }

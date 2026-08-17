@@ -3,8 +3,8 @@ package com.open.note.share
 import android.content.Context
 import android.util.Log
 import com.open.note.data.local.dao.AttachmentDao
+import com.open.note.data.local.dao.NoteDao
 import com.open.note.data.local.entity.Attachment
-import com.open.note.data.local.AuthStore
 import com.open.note.data.remote.api.AttachmentApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -17,7 +17,7 @@ import java.security.MessageDigest
 class AttachmentUploader(
     private val context: Context,
     private val dao: AttachmentDao,
-    private val authStore: AuthStore,
+    private val noteDao: NoteDao,
     private val api: AttachmentApi
 ) {
 
@@ -52,6 +52,8 @@ class AttachmentUploader(
                             dao.upsert(updated.copy(fileId = data.fileId))
                         }
                     }
+                    // 上传成功后，把笔记 content 中的本地占位 URL 替换为服务端下载地址
+                    replacePlaceholderInNote(noteId, att, data.url)
                     true
                 } else {
                     Log.w(TAG, "Upload failed: ${resp.code()}")
@@ -99,6 +101,37 @@ class AttachmentUploader(
             }
         }
         return count
+    }
+
+    /**
+     * 把笔记 content 中的本地占位图 URL（/{noteId}/{attachId}_placeholder.png）
+     * 替换为服务端可访问的下载地址，供网页端等跨端显示。
+     * 服务端 upload 已返回统一下载 URL（/api/attachments/{attachId}/download）。
+     */
+    private suspend fun replacePlaceholderInNote(
+        noteId: String, att: Attachment, serverUrl: String?
+    ) {
+        if (serverUrl.isNullOrEmpty()) return
+        val note = noteDao.getByServerId(noteId) ?: return
+        val placeholder = "/$noteId/${att.attachmentId}_placeholder.png"
+        if (!note.content.contains(placeholder)) return
+
+        // 预写缓存：把本地占位图复制为服务端 attachId 的缓存文件，
+        // 替换后本端加载直接命中本地，无需首次网络下载。
+        val serverAttachId = Regex("""/attachments/([^/]+)/download""")
+            .find(serverUrl)?.groupValues?.get(1)
+        if (serverAttachId != null) {
+            val localFile = getPlaceholderFile(noteId, att.attachmentId)
+            val cacheFile = File(context.cacheDir, "att_$serverAttachId.bin")
+            if (localFile.exists() && (!cacheFile.exists() || cacheFile.length() == 0L)) {
+                localFile.copyTo(cacheFile, overwrite = true)
+                Log.d(TAG, "Pre-cached placeholder -> att_$serverAttachId.bin")
+            }
+        }
+
+        val newContent = note.content.replace(placeholder, serverUrl)
+        noteDao.upsert(note.copy(content = newContent, state = com.open.note.data.local.entity.Note.STATE_MODIFIED))
+        Log.d(TAG, "Replaced placeholder in note $noteId -> $serverUrl")
     }
 
     private fun getPlaceholderFile(noteId: String, attachId: String): File =

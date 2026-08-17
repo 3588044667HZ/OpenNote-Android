@@ -17,15 +17,23 @@ class TrashViewModel @Inject constructor(
     val trashNotes: StateFlow<List<Note>> = noteRepository.getTrashNotes()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    fun recoverNote(serverId: String) {
+    fun recoverNote(localId: Long, serverId: String?) {
         viewModelScope.launch {
-            noteRepository.recoverNote(serverId)
+            if (serverId == null) {
+                noteRepository.recoverLocalNote(localId)
+            } else {
+                noteRepository.recoverNote(serverId)
+            }
         }
     }
 
-    fun permanentlyDeleteNote(serverId: String) {
+    fun permanentlyDeleteNote(localId: Long, serverId: String?) {
         viewModelScope.launch {
-            noteRepository.permanentlyDeleteNote(serverId)
+            if (serverId == null) {
+                noteRepository.permanentlyDeleteNoteByLocalId(localId)
+            } else {
+                noteRepository.permanentlyDeleteNote(serverId)
+            }
         }
     }
 

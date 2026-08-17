@@ -23,6 +23,7 @@ fun NoteDto.toEntity(): Note {
         isPinned = isPinned ?: false,
         version = version ?: 0,
         updatedAt = parseIsoToEpoch(updatedAt) ?: System.currentTimeMillis(),
+        state = Note.STATE_SYNCED,
         lastServerUpdate = updatedAt
     )
 }

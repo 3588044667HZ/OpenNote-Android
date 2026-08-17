@@ -66,6 +66,8 @@ import kotlinx.coroutines.launch
 @Composable
 fun SettingsScreen(
     onLogout: () -> Unit,
+    onLogin: () -> Unit = {},
+    isLoggedIn: Boolean = false,
     skinViewModel: SkinViewModel = hiltViewModel(),
     settingsViewModel: SettingsViewModel = hiltViewModel()
 ) {
@@ -121,12 +123,12 @@ fun SettingsScreen(
                     Spacer(modifier = Modifier.width(16.dp))
                     Column {
                         Text(
-                            text = username,
+                            text = if (isLoggedIn) username else "Offline Mode",
                             fontWeight = FontWeight.SemiBold,
                             fontSize = 16.sp
                         )
                         Text(
-                            text = BuildConfig.VERSION_NAME,
+                            text = if (isLoggedIn) BuildConfig.VERSION_NAME else "笔记仅保存在本机，登录后启用同步",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -422,17 +424,32 @@ fun SettingsScreen(
         }
 
         item {
-            Button(
-                onClick = { showSignOutConfirm = true },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(50.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.error
-                ),
-                shape = RoundedCornerShape(8.dp)
-            ) {
-                Text("Sign Out", fontWeight = FontWeight.Bold)
+            if (isLoggedIn) {
+                Button(
+                    onClick = { showSignOutConfirm = true },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(50.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error
+                    ),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text("Sign Out", fontWeight = FontWeight.Bold)
+                }
+            } else {
+                Button(
+                    onClick = onLogin,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(50.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary
+                    ),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text("Sign In to Sync", fontWeight = FontWeight.Bold)
+                }
             }
         }
 

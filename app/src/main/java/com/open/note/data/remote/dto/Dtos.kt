@@ -70,6 +70,15 @@ data class UpdateNoteRequest(
     val isPinned: Boolean? = null
 )
 
+data class RestoreNoteRequest(
+    val title: String,
+    val content: String,
+    val notebookId: String? = null,
+    val color: String = "blue",
+    val isPinned: Boolean = false,
+    val updatedAt: String? = null
+)
+
 data class SyncResponse(
     val updated: List<NoteDto> = emptyList(),
     val deletedIds: List<String> = emptyList(),

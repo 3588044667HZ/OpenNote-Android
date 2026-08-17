@@ -2,6 +2,7 @@ package com.open.note.ui.notes
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.open.note.data.local.AuthStore
 import com.open.note.data.local.entity.Folder
 import com.open.note.data.local.entity.Note
 import com.open.note.data.repository.NoteRepository
@@ -14,7 +15,8 @@ import javax.inject.Inject
 @HiltViewModel
 class NoteListViewModel @Inject constructor(
     private val noteRepository: NoteRepository,
-    private val syncManager: SyncManager
+    private val syncManager: SyncManager,
+    private val authStore: AuthStore
 ) : ViewModel() {
 
     private val _sortBy = MutableStateFlow("updatedAt")
@@ -31,6 +33,9 @@ class NoteListViewModel @Inject constructor(
 
     private val _isRefreshing = MutableStateFlow(false)
     val isRefreshing: StateFlow<Boolean> = _isRefreshing
+
+    private val _syncMessage = MutableStateFlow<String?>(null)
+    val syncMessage: StateFlow<String?> = _syncMessage
 
     val notes: StateFlow<List<Note>> = combine(
         noteRepository.getActiveNotes(),
@@ -63,6 +68,7 @@ class NoteListViewModel @Inject constructor(
 
     fun loadData() {
         viewModelScope.launch {
+            if (!isLoggedIn()) return@launch
             noteRepository.fetchNotesFromServer()
             noteRepository.fetchNotebooksFromServer()
         }
@@ -72,15 +78,23 @@ class NoteListViewModel @Inject constructor(
         viewModelScope.launch {
             _isRefreshing.value = true
             try {
-                syncManager.syncPendingNotes()
-                syncManager.incrementalSync()
-                noteRepository.fetchNotesFromServer()
-                noteRepository.fetchNotebooksFromServer()
+                if (!isLoggedIn()) {
+                    _syncMessage.value = "未登录，无法同步。请到设置页登录"
+                    return@launch
+                }
+                syncManager.doSync()
             } finally {
                 _isRefreshing.value = false
             }
         }
     }
+
+    fun clearSyncMessage() {
+        _syncMessage.value = null
+    }
+
+    private suspend fun isLoggedIn(): Boolean =
+        !authStore.getAccessTokenBlocking().isNullOrBlank()
 
     fun onSearchKeywordChanged(keyword: String) {
         _searchKeyword.value = keyword
@@ -98,15 +112,15 @@ class NoteListViewModel @Inject constructor(
         _sortBy.value = sortBy
     }
 
-    fun deleteNote(serverId: String) {
+    fun deleteNote(localId: Long, serverId: String?) {
         viewModelScope.launch {
-            noteRepository.deleteNote(serverId)
+            noteRepository.deleteNote(localId, serverId)
         }
     }
 
-    fun togglePin(serverId: String) {
+    fun togglePin(serverId: String?) {
         viewModelScope.launch {
-            noteRepository.togglePin(serverId)
+            serverId?.let { noteRepository.togglePin(it) }
         }
     }
 }

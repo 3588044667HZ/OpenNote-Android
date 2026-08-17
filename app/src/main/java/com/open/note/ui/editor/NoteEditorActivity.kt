@@ -40,6 +40,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -59,8 +60,12 @@ import org.json.JSONObject
 class NoteEditorActivity : ComponentActivity() {
     companion object {
         const val EXTRA_NOTE_ID = "note_id"
-        fun newIntent(context: Context, noteId: String? = null): Intent =
-            Intent(context, NoteEditorActivity::class.java).apply { putExtra(EXTRA_NOTE_ID, noteId) }
+        const val EXTRA_LOCAL_ID = "local_id"
+        fun newIntent(context: Context, noteId: String? = null, localId: Long? = null): Intent =
+            Intent(context, NoteEditorActivity::class.java).apply {
+                putExtra(EXTRA_NOTE_ID, noteId)
+                if (localId != null) putExtra(EXTRA_LOCAL_ID, localId)
+            }
     }
 
     @Inject lateinit var skinManager: SkinManager
@@ -73,7 +78,12 @@ class NoteEditorActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         val noteId = intent.getStringExtra(EXTRA_NOTE_ID)
-        setContent { MaterialTheme { NoteEditorScreen(noteId = noteId, onBack = { finish() }) } }
+        val localId = if (intent.hasExtra(EXTRA_LOCAL_ID)) intent.getLongExtra(EXTRA_LOCAL_ID, 0L) else null
+        setContent {
+            MaterialTheme {
+                NoteEditorScreen(noteId = noteId, localNoteId = localId, onBack = { finish() })
+            }
+        }
     }
 }
 
@@ -82,6 +92,7 @@ class NoteEditorActivity : ComponentActivity() {
 @Composable
 fun NoteEditorScreen(
     noteId: String?,
+    localNoteId: Long? = null,
     onBack: () -> Unit,
     editorViewModel: NoteEditorViewModel = hiltViewModel(),
     skinViewModel: SkinViewModel = hiltViewModel()
@@ -116,7 +127,7 @@ fun NoteEditorScreen(
         ActivityResultContracts.PickVisualMedia()
     ) { uri ->
         uri ?: return@rememberLauncherForActivityResult
-        val noteKey = noteId ?: "draft"
+        val noteKey = noteId ?: (localNoteId?.toString() ?: "draft")
         MainScope().launch {
             com.open.note.share.AttachmentManager(
                 context, attachmentDao, webView
@@ -124,7 +135,7 @@ fun NoteEditorScreen(
         }
     }
 
-    LaunchedEffect(noteId) { editorViewModel.initialize(noteId) }
+    LaunchedEffect(noteId, localNoteId) { editorViewModel.initialize(noteId, localNoteId) }
     LaunchedEffect(skin) {
         webView?.post {
             webView?.evaluateJavascript(SkinWebView.generateSkinCSS(skin)) { r -> if (r == "null") Log.w("Editor", "skinCSS null") }
@@ -420,6 +431,52 @@ fun NoteEditorScreen(
                 TextButton(onClick = { showDeleteDialog = false; editorViewModel.deleteNote(); onBack() }) {
                     Text("Delete", color = MaterialTheme.colorScheme.error) } },
             dismissButton = { TextButton(onClick = { showDeleteDialog = false }) { Text("Cancel") } })
+    }
+
+    // 保存 409 冲突对话框
+    val conflict by editorViewModel.conflict.collectAsState()
+    val conflictNoteMissing by editorViewModel.conflictNoteMissing.collectAsState()
+
+    conflict?.let { c ->
+        AlertDialog(
+            onDismissRequest = { editorViewModel.dismissConflict() },
+            title = { Text("笔记冲突") },
+            text = {
+                Text("此笔记在其他设备被修改。\n${c.message}")
+            },
+            confirmButton = {
+                TextButton(onClick = { editorViewModel.keepLocal() }) {
+                    Text("保留本地", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = { editorViewModel.useRemote() }) { Text("采用远程") }
+                    TextButton(onClick = { editorViewModel.recheckConflict() }) { Text("重新检查") }
+                    TextButton(onClick = { editorViewModel.dismissConflict() }) { Text("取消") }
+                }
+            }
+        )
+    }
+
+    if (conflictNoteMissing) {
+        AlertDialog(
+            onDismissRequest = { editorViewModel.dismissMissing() },
+            title = { Text("笔记已删除") },
+            text = { Text("此笔记已在其他设备被永久删除。") },
+            confirmButton = {
+                TextButton(onClick = { editorViewModel.keepLocalAsNew() }) {
+                    Text("保留本地并重新上传", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = { editorViewModel.discardLocal(); onBack() }) {
+                        Text("从本地删除", color = MaterialTheme.colorScheme.error)
+                    }
+                }
+            }
+        )
     }
 }
 

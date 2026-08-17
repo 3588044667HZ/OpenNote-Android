@@ -55,7 +55,6 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.open.note.MainActivity
 import com.open.note.ui.settings.NetworkSettingsActivity
 import dagger.hilt.android.AndroidEntryPoint
 
@@ -91,7 +90,8 @@ class LoginActivity : ComponentActivity() {
 
         LaunchedEffect(Unit) {
             loginViewModel.navigateToMain.collect {
-                startActivity(Intent(this@LoginActivity, MainActivity::class.java))
+                // 登录成功后返回主界面（MainActivity 检测登录态并触发同步）
+                setResult(RESULT_OK)
                 finish()
             }
         }

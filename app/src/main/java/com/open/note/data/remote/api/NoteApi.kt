@@ -4,6 +4,7 @@ import com.open.note.data.remote.dto.ApiResponse
 import com.open.note.data.remote.dto.CreateNoteRequest
 import com.open.note.data.remote.dto.NoteDto
 import com.open.note.data.remote.dto.NoteListResponse
+import com.open.note.data.remote.dto.RestoreNoteRequest
 import com.open.note.data.remote.dto.SyncResponse
 import com.open.note.data.remote.dto.UpdateNoteRequest
 import retrofit2.Response
@@ -51,6 +52,12 @@ interface NoteApi {
 
     @PUT("notes/{id}/pin")
     suspend fun togglePin(@Path("id") id: String): Response<ApiResponse<NoteDto>>
+
+    @PUT("notes/{id}/restore")
+    suspend fun restoreNote(
+        @Path("id") id: String,
+        @Body request: RestoreNoteRequest
+    ): Response<ApiResponse<NoteDto>>
 
     @GET("notes/trash")
     suspend fun getTrashNotes(): Response<ApiResponse<List<NoteDto>>>

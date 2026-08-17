@@ -28,17 +28,23 @@ interface NoteDao {
     @Query("SELECT * FROM notes WHERE deleted_at IS NULL AND notebook_id = :notebookId ORDER BY is_pinned DESC, updated_at DESC")
     fun getNotesByNotebook(notebookId: String): Flow<List<Note>>
 
-    @Query("SELECT * FROM notes WHERE is_pending_sync = 1")
-    suspend fun getPendingSyncNotes(): List<Note>
+    @Query("SELECT * FROM notes WHERE state != 1")
+    suspend fun getDirtyNotes(): List<Note>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(note: Note): Long
 
-    @Query("UPDATE notes SET is_pending_sync = :pending WHERE local_id = :id")
-    suspend fun markPendingSync(id: Long, pending: Boolean = true)
+    @Query("UPDATE notes SET state = :state WHERE local_id = :id")
+    suspend fun updateState(id: Long, state: Int)
 
     @Query("UPDATE notes SET deleted_at = :deletedAt WHERE server_id = :serverId")
     suspend fun softDelete(serverId: String, deletedAt: Long)
+
+    @Query("UPDATE notes SET deleted_at = :deletedAt WHERE local_id = :localId")
+    suspend fun softDeleteByLocalId(localId: Long, deletedAt: Long)
+
+    @Query("UPDATE notes SET deleted_at = NULL WHERE local_id = :localId")
+    suspend fun recoverByLocalId(localId: Long)
 
     @Query("DELETE FROM notes WHERE server_id = :serverId")
     suspend fun hardDelete(serverId: String)

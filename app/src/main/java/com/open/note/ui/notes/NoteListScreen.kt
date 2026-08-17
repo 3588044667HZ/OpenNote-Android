@@ -7,9 +7,13 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.NoteAdd
+import androidx.compose.material.pullrefresh.PullRefreshIndicator
+import androidx.compose.material.pullrefresh.pullRefresh
+import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -37,10 +41,11 @@ val NOTE_COLORS = mapOf(
     "gray" to Color(0xFF9B9B9B)
 )
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
 @Composable
 fun NoteListScreen(
-    onNoteClick: (String?) -> Unit,
+    isLoggedIn: Boolean,
+    onNoteClick: (String?, Long?) -> Unit,
     onNewNote: () -> Unit,
     viewModel: NoteListViewModel = hiltViewModel(),
     skinViewModel: SkinViewModel = hiltViewModel()
@@ -51,62 +56,128 @@ fun NoteListScreen(
     val searchKeyword by viewModel.searchKeyword.collectAsState()
     val selectedNotebookId by viewModel.selectedNotebookId.collectAsState()
     val selectedColor by viewModel.selectedColor.collectAsState()
+    val syncMessage by viewModel.syncMessage.collectAsState()
     val skin by skinViewModel.selectedSkin.collectAsState()
     val titleColor = SkinColors.parseColor(skin.titleColor)
     val textColor = SkinColors.parseColor(skin.textColor)
     val timeColor = SkinColors.parseColor(skin.timeColor)
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        SearchBar(
-            keyword = searchKeyword,
-            onKeywordChange = { viewModel.onSearchKeywordChanged(it) }
-        )
+    val pullRefreshState = rememberPullRefreshState(
+        refreshing = isRefreshing,
+        onRefresh = { viewModel.refresh() }
+    )
+    val snackbarHostState = remember { SnackbarHostState() }
 
-        FilterRow(
-            notebooks = notebooks,
-            selectedNotebookId = selectedNotebookId,
-            selectedColor = selectedColor,
-            onNotebookSelected = { viewModel.onNotebookSelected(it) },
-            onColorSelected = { viewModel.onColorSelected(it) }
-        )
+    // 登录成功后自动触发一次同步
+    LaunchedEffect(isLoggedIn) {
+        if (isLoggedIn) viewModel.refresh()
+    }
 
-        if (notes.isEmpty()) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        Icons.Outlined.NoteAdd,
-                        contentDescription = null,
-                        modifier = Modifier.size(64.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        "No notes yet",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+    LaunchedEffect(syncMessage) {
+        syncMessage?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.clearSyncMessage()
+        }
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            if (!isLoggedIn) {
+                OfflineBanner()
             }
-        } else {
-            LazyColumn(
-                contentPadding = PaddingValues(vertical = 4.dp)
+
+            SearchBar(
+                keyword = searchKeyword,
+                onKeywordChange = { viewModel.onSearchKeywordChanged(it) }
+            )
+
+            FilterRow(
+                notebooks = notebooks,
+                selectedNotebookId = selectedNotebookId,
+                selectedColor = selectedColor,
+                onNotebookSelected = { viewModel.onNotebookSelected(it) },
+                onColorSelected = { viewModel.onColorSelected(it) }
+            )
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .pullRefresh(pullRefreshState)
             ) {
-                items(notes, key = { it.localId }) { note ->
-                    NoteCard(
-                        note = note,
-                        onClick = { onNoteClick(note.serverId) },
-                        onDelete = { viewModel.deleteNote(note.serverId ?: return@NoteCard) },
-                        onTogglePin = { viewModel.togglePin(note.serverId ?: return@NoteCard) },
-                        titleColor = titleColor,
-                        textColor = textColor,
-                        timeColor = timeColor
-                    )
+                if (notes.isEmpty()) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                Icons.Outlined.NoteAdd,
+                                contentDescription = null,
+                                modifier = Modifier.size(64.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                if (isLoggedIn) "No notes yet" else "离线模式：点击 + 新建笔记，登录后自动同步",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                } else {
+                    LazyColumn(
+                        contentPadding = PaddingValues(vertical = 4.dp)
+                    ) {
+                        items(notes, key = { it.localId }) { note ->
+                            NoteCard(
+                                note = note,
+                                onClick = { onNoteClick(note.serverId, note.localId) },
+                                onDelete = { viewModel.deleteNote(note.localId, note.serverId) },
+                                onTogglePin = { viewModel.togglePin(note.serverId) },
+                                titleColor = titleColor,
+                                textColor = textColor,
+                                timeColor = timeColor
+                            )
+                        }
+                    }
                 }
+
+                PullRefreshIndicator(
+                    refreshing = isRefreshing,
+                    state = pullRefreshState,
+                    modifier = Modifier.align(Alignment.TopCenter)
+                )
             }
         }
+
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier.align(Alignment.BottomCenter)
+        )
+    }
+}
+
+@Composable
+private fun OfflineBanner() {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.secondaryContainer)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            Icons.Filled.CloudOff,
+            contentDescription = null,
+            modifier = Modifier.size(16.dp),
+            tint = MaterialTheme.colorScheme.onSecondaryContainer
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            "离线模式 — 笔记仅保存在本机",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSecondaryContainer
+        )
     }
 }
 

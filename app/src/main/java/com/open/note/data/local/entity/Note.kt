@@ -43,11 +43,18 @@ data class Note(
     @ColumnInfo(name = "deleted_at")
     var deletedAt: Long? = null,
 
-    @ColumnInfo(name = "is_pending_sync")
-    var isPendingSync: Boolean = false,
+    // 同步状态: 0=NEW 未上传 1=SYNCED 已同步 2=MODIFIED 待上传 3=RESTORE 删除冲突恢复
+    var state: Int = 0,
 
     @ColumnInfo(name = "last_server_update")
     var lastServerUpdate: String? = null
 ) {
     val isDeleted: Boolean get() = deletedAt != null
+
+    companion object {
+        const val STATE_NEW = 0
+        const val STATE_SYNCED = 1
+        const val STATE_MODIFIED = 2
+        const val STATE_RESTORE = 3
+    }
 }
