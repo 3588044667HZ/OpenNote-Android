@@ -31,7 +31,8 @@ class SyncManager @Inject constructor(
     private val noteApi: NoteApi,
     private val authStore: AuthStore,
     private val noteRepository: NoteRepository,
-    private val noteHistoryDao: NoteHistoryDao
+    private val noteHistoryDao: NoteHistoryDao,
+    private val attachmentUploader: com.open.note.share.AttachmentUploader
 ) {
 
     companion object {
@@ -81,6 +82,14 @@ class SyncManager @Inject constructor(
         Log.d(TAG, "Uploading ${dirty.size} dirty notes")
         dirty.forEach { note ->
             try {
+                // 先上传附件（图片），把 content 中占位 URL 替换为服务端下载地址，
+                // 再上传笔记内容，保证服务器存的一直是真实 URL（网页端可显示）。
+                // 附件可能记录在插入时的任意 key 下（serverId / localId / draft），全部覆盖
+                if (note.deletedAt == null) {
+                    listOfNotNull(note.serverId, note.localId.toString(), "draft")
+                        .distinct()
+                        .forEach { attachmentUploader.syncAll(it) }
+                }
                 when {
                     // 本地已删除 → 上传删除
                     note.deletedAt != null -> uploadDelete(note)
