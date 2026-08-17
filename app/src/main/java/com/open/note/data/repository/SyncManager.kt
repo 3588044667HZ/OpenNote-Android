@@ -10,9 +10,21 @@ import com.open.note.data.remote.dto.toEntity
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/** 一次同步中检测到的双端修改冲突（需用户决定，不自动裁决） */
+data class SyncConflict(
+    val local: Note,
+    val remote: Note
+)
+
+/** 同步结果 */
+data class SyncResult(
+    val conflicts: List<SyncConflict> = emptyList()
+)
+
 /**
- * 双向同步：本地优先 + state 脏标记 + 链式冲突裁决。
- * 流程：上传本地脏数据 → 拉取远端增量 → 裁决合并 → 置锚点。
+ * 双向同步：本地优先 + state 脏标记 + 链式冲突处理。
+ * 流程：上传本地脏数据 → 拉取远端增量 → 合并（冲突进列表）→ 置锚点。
+ * 双端都修改（内容不同）时**不自动裁决**，进入 conflicts 由 UI 弹窗决定。
  */
 @Singleton
 class SyncManager @Inject constructor(
@@ -28,18 +40,21 @@ class SyncManager @Inject constructor(
         private const val HISTORY_KEEP_DAYS = 90L
     }
 
-    /** 全量同步入口：未登录直接跳过。 */
-    suspend fun doSync(): Result<Unit> {
+    private val conflicts = mutableListOf<SyncConflict>()
+
+    /** 全量同步入口：未登录直接跳过。返回本次冲突列表。 */
+    suspend fun doSync(): Result<SyncResult> {
         val token = authStore.getAccessTokenBlocking()
         if (token.isNullOrBlank()) {
             Log.d(TAG, "Not logged in, skip sync")
-            return Result.success(Unit)
+            return Result.success(SyncResult())
         }
+        conflicts.clear()
         return try {
             uploadDirty()
             mergeRemote()
             trimHistory()
-            Result.success(Unit)
+            Result.success(SyncResult(conflicts.toList()))
         } catch (e: Exception) {
             Log.e(TAG, "Sync error", e)
             Result.failure(e)
@@ -218,18 +233,9 @@ class SyncManager @Inject constructor(
             return
         }
 
-        // ⑤ 双改 → 时间裁决
-        if (local.updatedAt >= remote.updatedAt) {
-            // 本地胜：抄远程版本号，保持脏状态待上传
-            local.lastServerUpdate = remote.lastServerUpdate
-            noteRepository.upsertNote(local)
-            Log.d(TAG, "Local wins conflict: $serverId")
-        } else {
-            // 远程胜：归档后覆盖
-            archiveIfNeeded(local, NoteHistory.CAUSE_CONFLICT)
-            noteRepository.upsertNote(remote.copy(localId = local.localId))
-            Log.d(TAG, "Remote wins conflict: $serverId (archived)")
-        }
+        // ⑤ 双端都修改 → 不自动裁决，进冲突列表由用户决定
+        conflicts.add(SyncConflict(local = local, remote = remote))
+        Log.d(TAG, "Conflict detected (both modified): $serverId")
     }
 
     /**

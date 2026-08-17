@@ -57,6 +57,8 @@ fun NoteListScreen(
     val selectedNotebookId by viewModel.selectedNotebookId.collectAsState()
     val selectedColor by viewModel.selectedColor.collectAsState()
     val syncMessage by viewModel.syncMessage.collectAsState()
+    val conflicts by viewModel.conflicts.collectAsState()
+    val conflictNoteMissing by viewModel.conflictNoteMissing.collectAsState()
     val skin by skinViewModel.selectedSkin.collectAsState()
     val titleColor = SkinColors.parseColor(skin.titleColor)
     val textColor = SkinColors.parseColor(skin.textColor)
@@ -153,6 +155,47 @@ fun NoteListScreen(
         SnackbarHost(
             hostState = snackbarHostState,
             modifier = Modifier.align(Alignment.BottomCenter)
+        )
+    }
+
+    // 同步冲突弹窗（一次处理一个，解决后显示下一个）
+    conflicts.firstOrNull()?.let { conflict ->
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissConflict(conflict) },
+            title = { Text("笔记冲突") },
+            text = {
+                Text("笔记 \"${conflict.local.title.ifEmpty { "Untitled" }}\" 在本机和其他设备都被修改。")
+            },
+            confirmButton = {
+                TextButton(onClick = { viewModel.keepLocal(conflict) }) {
+                    Text("保留本地", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = { viewModel.useRemote(conflict) }) { Text("采用远程") }
+                    TextButton(onClick = { viewModel.recheckConflict(conflict) }) { Text("重新检查") }
+                    TextButton(onClick = { viewModel.dismissConflict(conflict) }) { Text("取消") }
+                }
+            }
+        )
+    }
+
+    if (conflictNoteMissing) {
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissMissing() },
+            title = { Text("笔记已删除") },
+            text = { Text("此笔记已在其他设备被永久删除。") },
+            confirmButton = {
+                TextButton(onClick = { viewModel.keepLocalAsNew() }) {
+                    Text("保留本地并重新上传", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.discardLocal() }) {
+                    Text("从本地删除", color = MaterialTheme.colorScheme.error)
+                }
+            }
         )
     }
 }
