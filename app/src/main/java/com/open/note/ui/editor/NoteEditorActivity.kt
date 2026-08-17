@@ -54,6 +54,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import org.json.JSONObject
 
 @AndroidEntryPoint
@@ -319,24 +320,45 @@ fun NoteEditorScreen(
                                     }
                                     Log.w("ImgInterceptor", "img file NOT FOUND: $path")
                                 }
-                                // 服务器附件 URL：/attachments/{attachId}/download → 下载并返回
+                                // 服务器附件 URL：/attachments/{attachId}/download[?size=thumb]
+                                // 两阶段方案：本机占位文件 → 缓存 → 网络（永不 404，state 分流）
                                 val attachMatch = Regex("""/attachments/([^/]+)/download""").find(path)
                                 if (attachMatch != null) {
                                     val attachId = attachMatch.groupValues[1]
                                     Log.d("ImgInterceptor", "server attachment req: $path attachId=$attachId")
-                                    val cached = File(ctx.cacheDir, "att_$attachId.bin")
                                     try {
-                                        val result: com.open.note.share.AttachmentResult?
-                                        if (cached.exists() && cached.length() > 0) {
-                                            result = com.open.note.share.AttachmentResult(
-                                                cached.readBytes(), guessImageMime(cached.readBytes()))
-                                        } else {
-                                            result = com.open.note.share.AttachmentHttp.download(ctx, attachId)
-                                            if (result != null) cached.writeBytes(result.bytes)
-                                        }
-                                        if (result != null) {
+                                        // 1) 本机插入的图：本地占位文件优先（高保真，零网络）。
+                                        // shouldInterceptRequest 为同步回调，runBlocking 仅做一次本地单条查询
+                                        val localPlaceholder = runBlocking {
+                                            attachmentDao.getById(attachId)
+                                        }?.richNoteId
+                                            ?.let { File(ctx.filesDir, "$it/${attachId}_placeholder.png") }
+                                        if (localPlaceholder != null && localPlaceholder.exists() && localPlaceholder.length() > 0) {
                                             return android.webkit.WebResourceResponse(
-                                                result.mime, "UTF-8", cached.inputStream())
+                                                "image/webp", "UTF-8", localPlaceholder.inputStream())
+                                        }
+                                        // 2) 缓存（仅 ready 响应写入，不会被占位图污染）
+                                        val cached = File(ctx.cacheDir, "att_$attachId.bin")
+                                        if (cached.exists() && cached.length() > 0) {
+                                            return android.webkit.WebResourceResponse(
+                                                guessImageMime(cached.readBytes()), "UTF-8", cached.inputStream())
+                                        }
+                                        // 3) 网络：ready 写缓存；pending/missing 不落盘，回退本地占位
+                                        val thumb = request.url.getQueryParameter("size") == "thumb"
+                                        val result = com.open.note.share.AttachmentHttp.download(
+                                            ctx, attachId, if (thumb) "thumb" else null)
+                                        if (result != null) {
+                                            if (result.state == com.open.note.share.AttachmentUploader.STATE_READY) {
+                                                cached.writeBytes(result.bytes)
+                                                return android.webkit.WebResourceResponse(
+                                                    result.mime, "UTF-8", cached.inputStream())
+                                            }
+                                            if (localPlaceholder != null && localPlaceholder.exists() && localPlaceholder.length() > 0) {
+                                                return android.webkit.WebResourceResponse(
+                                                    "image/webp", "UTF-8", localPlaceholder.inputStream())
+                                            }
+                                            return android.webkit.WebResourceResponse(
+                                                result.mime, "UTF-8", result.bytes.inputStream())
                                         }
                                     } catch (e: Exception) {
                                         Log.e("ImgInterceptor", "download attach failed: $attachId", e)

@@ -122,3 +122,32 @@ data class FileUploadResponse(
     val height: Int = 0,
     val md5: String = ""
 )
+
+/** 两阶段上传：注册附件槽位（回执）请求体，attachId 由客户端 UUID 生成 */
+data class AttachmentRegRequest(
+    val attachId: String,
+    val noteId: String? = null,
+    val type: Int = 0,
+    val width: Int = 0,
+    val height: Int = 0,
+    val fileName: String? = null,
+    val size: Long = 0,
+    val md5: String = ""
+)
+
+/** 注册回执：url 为压缩图地址（content 用），originalUrl 为原图地址（查看原图用） */
+data class AttachmentRegResponse(
+    val attachId: String? = null,
+    val url: String? = null,
+    val originalUrl: String? = null,
+    val state: String? = null
+)
+
+/** PUT file 上传回执 */
+data class AttachmentPutResponse(
+    val attachId: String? = null,
+    val url: String? = null,
+    val md5: String = "",
+    val size: Long = 0,
+    val state: String? = null
+)

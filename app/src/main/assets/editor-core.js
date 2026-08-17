@@ -85,8 +85,8 @@
     md = md.replace(/<hr\s*\/?>/gi, '---\n');
     md = md.replace(/<br\s*\/?>/gi, '\n');
     md = md.replace(/<img[^>]*src="([^"]*)"[^>]*>/gi, function(m, src) {
-      var attachMatch = /attachId=([^&"]+)/.exec(src);
-      if (attachMatch) return '![attachment](' + src + ')';
+      var isAttach = /attachId=([^&"]+)/.exec(src) || src.indexOf('/api/attachments/') >= 0;
+      if (isAttach) return '![attachment](' + src + ')';
       return '![](' + src + ')';
     });
     md = md.replace(/<[^>]+>/g, '');
@@ -330,8 +330,11 @@
     if (!editor || !data) return;
     var src = data.src || '';
     var attachId = data.attachId || '';
-    var sep = src.indexOf('?') >= 0 ? '&' : '?';
-    if (attachId) src += sep + 'attachId=' + attachId;
+    // 两阶段方案下 src 已是 /api/attachments/{uuid}/download?size=thumb，无需再拼 attachId
+    if (attachId && src.indexOf('attachId=') < 0) {
+      var sep = src.indexOf('?') >= 0 ? '&' : '?';
+      src += sep + 'attachId=' + attachId;
+    }
     editor.chain().focus().setImage({ src: src, alt: data.alt || '' }).run();
     notifyChange();
   };

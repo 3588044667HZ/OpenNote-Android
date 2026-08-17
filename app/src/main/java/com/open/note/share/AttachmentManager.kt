@@ -84,7 +84,9 @@ class AttachmentManager(
         webView?.post {
             val data = JSONObject().apply {
                 put("attachId", att.attachmentId)
-                put("src", "/$noteId/${att.attachmentId}_placeholder.png")
+                // 两阶段方案：src 直接写确定性压缩图地址（attachId=客户端 UUID），
+                // 不依赖上传结果；拦截器优先命中本地占位文件
+                put("src", "/api/attachments/${att.attachmentId}/download?size=thumb")
                 put("width", att.width)
                 put("height", att.height)
                 put("alt", "")

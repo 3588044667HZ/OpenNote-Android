@@ -7,6 +7,7 @@ import com.open.note.data.local.entity.Note
 import com.open.note.data.repository.ConflictException
 import com.open.note.data.repository.NoteRepository
 import com.open.note.data.repository.NotFoundException
+import com.open.note.share.AttachmentUploader
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -23,7 +24,8 @@ data class EditorConflict(
 
 @HiltViewModel
 class NoteEditorViewModel @Inject constructor(
-    private val noteRepository: NoteRepository
+    private val noteRepository: NoteRepository,
+    private val attachmentUploader: AttachmentUploader
 ) : ViewModel() {
 
     private var noteId: String? = null
@@ -165,10 +167,16 @@ class NoteEditorViewModel @Inject constructor(
     private suspend fun saveNote() {
         _isSaving.value = true
         try {
+            // 先上传图片附件，并把待保存 content 中的占位 URL 替换为服务端地址，
+            // 保证服务器端从第一次保存起就能正常显示（否则网页端拿到死链）
+            val noteKey = noteId ?: (localNoteId?.toString() ?: "draft")
+            attachmentUploader.syncAll(noteKey)
+            val contentToSave = attachmentUploader.resolvePlaceholders(noteKey, _content.value)
+
             val currentNote = _note.value
             if (currentNote != null) {
                 currentNote.title = _title.value
-                currentNote.content = _content.value
+                currentNote.content = contentToSave
                 currentNote.color = _selectedColor.value
                 currentNote.notebookId = _selectedNotebookId.value
                 currentNote.isPinned = _isPinned.value
@@ -191,7 +199,7 @@ class NoteEditorViewModel @Inject constructor(
             } else {
                 val result = noteRepository.createNote(
                     title = _title.value,
-                    content = _content.value,
+                    content = contentToSave,
                     notebookId = _selectedNotebookId.value,
                     color = _selectedColor.value,
                     isPinned = _isPinned.value

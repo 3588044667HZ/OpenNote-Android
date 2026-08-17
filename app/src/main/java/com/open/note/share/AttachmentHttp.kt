@@ -10,7 +10,9 @@ import java.util.concurrent.TimeUnit
 
 data class AttachmentResult(
     val bytes: ByteArray,
-    val mime: String
+    val mime: String,
+    /** X-Attachment-State：ready / pending / missing（永不 404 方案） */
+    val state: String? = null
 )
 
 /**
@@ -29,7 +31,7 @@ object AttachmentHttp {
     }
 
     /** 下载附件二进制（含认证头）。失败返回 null。 */
-    fun download(context: Context, attachId: String): AttachmentResult? {
+    fun download(context: Context, attachId: String, size: String? = null): AttachmentResult? {
         val authStore = AuthStore(context)
         return try {
             val baseUrl = runBlocking {
@@ -39,8 +41,12 @@ object AttachmentHttp {
                 }
             }
             val token = runBlocking { authStore.getAccessTokenBlocking() }
+            val url = buildString {
+                append("${baseUrl}attachments/$attachId/download")
+                if (size != null) append("?size=$size")
+            }
             val request = Request.Builder()
-                .url("${baseUrl}attachments/$attachId/download")
+                .url(url)
                 .header("Authorization", "Bearer ${token ?: ""}")
                 .build()
             client.newCall(request).execute().use { resp ->
@@ -49,8 +55,9 @@ object AttachmentHttp {
                     val bytes = body.bytes()
                     val mime = body.contentType()?.toString()
                         ?: guessMime(bytes)
-                    Log.d(TAG, "downloaded $attachId size=${bytes.size} mime=$mime")
-                    AttachmentResult(bytes, mime)
+                    val state = resp.header("X-Attachment-State")
+                    Log.d(TAG, "downloaded $attachId size=${bytes.size} mime=$mime state=$state")
+                    AttachmentResult(bytes, mime, state)
                 } else {
                     Log.w(TAG, "download $attachId failed: ${resp.code}")
                     null

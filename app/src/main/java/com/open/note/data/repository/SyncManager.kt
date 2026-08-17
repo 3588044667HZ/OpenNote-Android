@@ -83,22 +83,29 @@ class SyncManager @Inject constructor(
         dirty.forEach { note ->
             try {
                 // 先上传附件（图片），把 content 中占位 URL 替换为服务端下载地址，
-                // 再上传笔记内容，保证服务器存的一直是真实 URL（网页端可显示）。
-                // 附件可能记录在插入时的任意 key 下（serverId / localId / draft），全部覆盖
+                // 再上传笔记内容，保证服务器存的一直是真实 URL（网页端可显示）
+                var current = note
                 if (note.deletedAt == null) {
-                    listOfNotNull(note.serverId, note.localId.toString(), "draft")
-                        .distinct()
-                        .forEach { attachmentUploader.syncAll(it) }
+                    // 附件可能记录在插入时的任意 key 下（serverId / localId / draft），全部覆盖
+                    val keys = listOfNotNull(note.serverId, note.localId.toString(), "draft").distinct()
+                    keys.forEach { attachmentUploader.syncAll(it) }
+                    // 附件替换已写回 DB，重新加载最新版本再上传内容（否则会上传旧占位 URL）
+                    current = noteRepository.getNoteById(note.localId) ?: note
+                    // 统一清洗占位 URL（对已同步附件同样生效，幂等），修复存量死链
+                    keys.forEach { key ->
+                        current = current.copy(
+                            content = attachmentUploader.resolvePlaceholders(key, current.content))
+                    }
                 }
                 when {
                     // 本地已删除 → 上传删除
                     note.deletedAt != null -> uploadDelete(note)
                     // 从未上传（NEW）→ POST 创建
-                    note.serverId == null -> uploadCreate(note)
+                    note.serverId == null -> uploadCreate(current)
                     // RESTORE（远程已删，本地胜）→ 恢复原 id
-                    note.state == Note.STATE_RESTORE -> uploadRestore(note)
+                    note.state == Note.STATE_RESTORE -> uploadRestore(current)
                     // MODIFIED → PUT（If-Match）
-                    else -> uploadUpdate(note)
+                    else -> uploadUpdate(current)
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Upload failed for note ${note.localId}", e)
