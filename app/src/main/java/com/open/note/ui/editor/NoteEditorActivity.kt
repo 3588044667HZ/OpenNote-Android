@@ -301,9 +301,34 @@ fun NoteEditorScreen(
                                 if (idx > 0) {
                                     val relative = path.substring(1, idx + placeholderMarker.length)
                                     val file = File(ctx.filesDir, relative)
+                                    Log.d("ImgInterceptor", "img req: $path -> filesDir/$relative exists=${file.exists()} len=${file.length()}")
                                     if (file.exists() && file.length() > 0) {
                                         return android.webkit.WebResourceResponse(
                                             "image/webp", "UTF-8", file.inputStream())
+                                    }
+                                    Log.w("ImgInterceptor", "img file NOT FOUND: $path")
+                                }
+                                // 服务器附件 URL：/attachments/{attachId}/download → 下载并返回
+                                val attachMatch = Regex("""/attachments/([^/]+)/download""").find(path)
+                                if (attachMatch != null) {
+                                    val attachId = attachMatch.groupValues[1]
+                                    Log.d("ImgInterceptor", "server attachment req: $path attachId=$attachId")
+                                    val cached = File(ctx.cacheDir, "att_$attachId.bin")
+                                    try {
+                                        val result: com.open.note.share.AttachmentResult?
+                                        if (cached.exists() && cached.length() > 0) {
+                                            result = com.open.note.share.AttachmentResult(
+                                                cached.readBytes(), guessImageMime(cached.readBytes()))
+                                        } else {
+                                            result = com.open.note.share.AttachmentHttp.download(ctx, attachId)
+                                            if (result != null) cached.writeBytes(result.bytes)
+                                        }
+                                        if (result != null) {
+                                            return android.webkit.WebResourceResponse(
+                                                result.mime, "UTF-8", cached.inputStream())
+                                        }
+                                    } catch (e: Exception) {
+                                        Log.e("ImgInterceptor", "download attach failed: $attachId", e)
                                     }
                                 }
                                 return assetLoader.shouldInterceptRequest(request.url)
@@ -712,4 +737,16 @@ enum class PickerMode {
     HIGHLIGHT,         // 高亮背景
     SOLID_UNDERLINE,   // 有色实线下划线
     WAVY_UNDERLINE     // 有色波浪线
+}
+
+/** 根据文件头猜测图片 MIME */
+private fun guessImageMime(bytes: ByteArray): String {
+    if (bytes.size >= 4) {
+        if (bytes[0] == 0x89.toByte() && bytes[1] == 0x50.toByte()) return "image/png"
+        if (bytes[0] == 0xFF.toByte() && bytes[1] == 0xD8.toByte()) return "image/jpeg"
+        if (bytes[0] == 0x52.toByte() && bytes[1] == 0x49.toByte() &&
+            bytes[2] == 0x46.toByte() && bytes[3] == 0x46.toByte()) return "image/webp"
+        if (bytes[0] == 0x47.toByte() && bytes[1] == 0x49.toByte()) return "image/gif"
+    }
+    return "image/*"
 }
