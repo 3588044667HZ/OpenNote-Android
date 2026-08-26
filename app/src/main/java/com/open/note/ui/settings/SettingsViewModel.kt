@@ -37,9 +37,15 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    fun deleteNotebook(serverId: String) {
+    fun deleteNotebook(folder: Folder) {
         viewModelScope.launch {
-            noteRepository.deleteNotebook(serverId)
+            val serverId = folder.serverId
+            if (serverId != null) {
+                noteRepository.deleteNotebook(serverId)
+            } else {
+                // 本地幽灵笔记本（服务端无记录），直接删本地行
+                noteRepository.deleteLocalNotebook(folder.localId)
+            }
         }
     }
 

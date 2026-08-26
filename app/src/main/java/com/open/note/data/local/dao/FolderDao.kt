@@ -16,9 +16,15 @@ interface FolderDao {
     @Query("SELECT * FROM folders WHERE server_id = :serverId")
     suspend fun getByServerId(serverId: String): Folder?
 
+    @Query("SELECT * FROM folders WHERE server_id IS NULL")
+    suspend fun getLocalOnly(): List<Folder>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(folder: Folder): Long
 
     @Query("DELETE FROM folders WHERE server_id = :serverId")
     suspend fun deleteByServerId(serverId: String)
+
+    @Query("DELETE FROM folders WHERE local_id = :localId")
+    suspend fun deleteByLocalId(localId: Long)
 }

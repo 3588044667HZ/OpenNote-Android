@@ -475,10 +475,8 @@ fun SettingsScreen(
             text = { Text("Delete \"${folder.name}\"? Notes in this notebook will remain but lose their notebook association.") },
             confirmButton = {
                 TextButton(onClick = {
-                    folder.serverId?.let { id ->
-                        settingsViewModel.deleteNotebook(id)
-                        showDeleteNotebookDialog = null
-                    }
+                    settingsViewModel.deleteNotebook(folder)
+                    showDeleteNotebookDialog = null
                 }) {
                     Text("Delete", color = MaterialTheme.colorScheme.error)
                 }

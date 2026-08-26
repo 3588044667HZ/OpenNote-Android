@@ -41,17 +41,15 @@ object AttachmentHttp {
                 }
             }
             val token = runBlocking { authStore.getAccessTokenBlocking() }
-            val url = buildString {
-                append("${baseUrl}attachments/$attachId/download")
-                if (size != null) append("?size=$size")
+            // size=thumb 首次请求；400（服务端不识别参数）时回退无参数原图，保证一定可显示
+            var resp = doDownload(baseUrl, token, attachId, size)
+            if (resp.code == 400 && size != null) {
+                Log.w(TAG, "thumb 400 for $attachId, fallback to original")
+                resp = doDownload(baseUrl, token, attachId, null)
             }
-            val request = Request.Builder()
-                .url(url)
-                .header("Authorization", "Bearer ${token ?: ""}")
-                .build()
-            client.newCall(request).execute().use { resp ->
-                if (resp.isSuccessful) {
-                    val body = resp.body ?: return@use null
+            resp.use {
+                if (it.isSuccessful) {
+                    val body = it.body ?: return@use null
                     val bytes = body.bytes()
                     val mime = body.contentType()?.toString()
                         ?: guessMime(bytes)
@@ -59,7 +57,7 @@ object AttachmentHttp {
                     Log.d(TAG, "downloaded $attachId size=${bytes.size} mime=$mime state=$state")
                     AttachmentResult(bytes, mime, state)
                 } else {
-                    Log.w(TAG, "download $attachId failed: ${resp.code}")
+                    Log.w(TAG, "download $attachId failed: ${it.code}")
                     null
                 }
             }
@@ -67,6 +65,20 @@ object AttachmentHttp {
             Log.e(TAG, "download $attachId error", e)
             null
         }
+    }
+
+    private fun doDownload(
+        baseUrl: String, token: String?, attachId: String, size: String?
+    ): okhttp3.Response {
+        val url = buildString {
+            append("${baseUrl}attachments/$attachId/download")
+            if (size != null) append("?size=$size")
+        }
+        val request = Request.Builder()
+            .url(url)
+            .header("Authorization", "Bearer ${token ?: ""}")
+            .build()
+        return client.newCall(request).execute()
     }
 
     /** 根据文件头猜测 MIME（服务端未返回 Content-Type 时） */

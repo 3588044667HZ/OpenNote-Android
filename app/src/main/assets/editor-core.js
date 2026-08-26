@@ -329,12 +329,7 @@
   window.__insertImage = function(data) {
     if (!editor || !data) return;
     var src = data.src || '';
-    var attachId = data.attachId || '';
-    // 两阶段方案下 src 已是 /api/attachments/{uuid}/download?size=thumb，无需再拼 attachId
-    if (attachId && src.indexOf('attachId=') < 0) {
-      var sep = src.indexOf('?') >= 0 ? '&' : '?';
-      src += sep + 'attachId=' + attachId;
-    }
+    // 两阶段方案：src 已是 /api/attachments/{uuid}/download?size=thumb，不再拼 attachId
     editor.chain().focus().setImage({ src: src, alt: data.alt || '' }).run();
     notifyChange();
   };

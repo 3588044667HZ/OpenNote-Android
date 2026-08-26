@@ -98,6 +98,7 @@ class NoteRepository @Inject constructor(
                 val dtos = response.body()?.data ?: emptyList()
                 val entities = dtos.map { it.toEntity() }
                 entities.forEach { safeUpsertFolder(it) }
+                cleanupGhostFolders(entities.map { it.name })
                 Result.success(entities)
             } else {
                 Result.failure(Exception("Failed to fetch notebooks"))
@@ -105,6 +106,14 @@ class NoteRepository @Inject constructor(
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+
+    /** 清理幽灵笔记本：本地 server_id=null 且与服务端同名（老 bug 双写残留），幂等 */
+    private suspend fun cleanupGhostFolders(serverNames: List<String>) {
+        if (serverNames.isEmpty()) return
+        val localOnly = folderDao.getLocalOnly()
+        localOnly.filter { it.name in serverNames }
+            .forEach { folderDao.deleteByLocalId(it.localId) }
     }
 
     suspend fun createNote(
@@ -283,12 +292,13 @@ class NoteRepository @Inject constructor(
 
     suspend fun createNotebook(name: String, color: String = "#4A90D9"): Result<Folder> {
         val localFolder = Folder(name = name, color = color)
-        safeUpsertFolder(localFolder)
+        val localId = safeUpsertFolder(localFolder)
         return try {
             val response = notebookApi.createNotebook(NotebookDto(name = name, color = color))
             if (response.isSuccessful && response.body()?.code == 0) {
                 val synced = response.body()!!.data!!.toEntity()
-                safeUpsertFolder(synced)
+                // 合并进本地占位行（按主键 localId REPLACE），避免同一笔记本落两行
+                safeUpsertFolder(synced.copy(localId = localId))
                 Result.success(synced)
             } else {
                 Result.success(localFolder)
@@ -327,6 +337,11 @@ class NoteRepository @Inject constructor(
         } catch (e: Exception) {
             Result.success(Unit)
         }
+    }
+
+    /** 删除本地幽灵笔记本（serverId=null，服务端无对应记录，仅删本地） */
+    suspend fun deleteLocalNotebook(localId: Long) {
+        folderDao.deleteByLocalId(localId)
     }
 
     suspend fun emptyTrash() { noteDao.emptyTrash() }
